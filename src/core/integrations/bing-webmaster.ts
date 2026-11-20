@@ -69,6 +69,30 @@ export class BingWebmasterClient {
     return unwrap<BingSite[]>(data) ?? [];
   }
 
+  /** Real query traffic statistics. Bing returns position, not search volume. */
+  async getQueryStats(siteUrl: string): Promise<Array<{
+    Query?: string;
+    Clicks?: number;
+    Impressions?: number;
+    AvgClickPosition?: number;
+    AvgImpressionPosition?: number;
+    Date?: string;
+  }>> {
+    const data = await this.http.request<{ d?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>>({
+      path: "/webmaster/api.svc/json/GetQueryStats",
+      query: { siteUrl },
+    });
+    const rows = unwrap<Array<Record<string, unknown>>>(data) ?? [];
+    return rows.map((row) => ({
+      Query: row.Query as string | undefined,
+      Clicks: row.Clicks as number | undefined,
+      Impressions: row.Impressions as number | undefined,
+      AvgClickPosition: row.AvgClickPosition as number | undefined,
+      AvgImpressionPosition: row.AvgImpressionPosition as number | undefined,
+      Date: row.Date as string | undefined,
+    }));
+  }
+
   async getUrlSubmissionQuota(siteUrl: string): Promise<{ DailyQuota?: number; MonthlyQuota?: number }> {
     const data = await this.http.request<{ d?: { DailyQuota?: number; MonthlyQuota?: number } }>({
       path: "/webmaster/api.svc/json/GetUrlSubmissionQuota",

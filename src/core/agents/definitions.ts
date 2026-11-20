@@ -22,7 +22,15 @@ import {
   searchMetrics,
   seoAudits,
   type Project,
+  type SearchIntent,
 } from "../db/schema";
+import {
+  associateCompetitorUrls,
+  businessValueScore,
+  classifyIntent,
+  commercialRelevance,
+  detectOpportunities,
+} from "../keywords/intelligence";
 import { getDecryptedTokens } from "../integrations/credentials";
 import { GitHubClient } from "../integrations/github";
 import { VercelClient, type VercelDeployment } from "../integrations/vercel";
@@ -373,52 +381,157 @@ const definitions: AgentDefinition[] = [
   {
     key: "KEYWORD_INTELLIGENCE_AGENT",
     name: "Keyword Intelligence Agent",
-    mission: "Store real query data with provenance and prioritize by business relevance.",
-    responsibilities: ["Import GSC queries", "Classify intent", "Cluster keywords", "Track history", "Never invent volume"],
-    toolsets: ["google_search_console", "database"],
+    mission: "Gather real query data from connected sources with provenance and prioritize by business value.",
+    responsibilities: [
+      "Import GSC and Bing query data",
+      "Classify intent",
+      "Score commercial relevance",
+      "Prioritize by realistic business value",
+      "Cluster by country and intent",
+      "Track ranking history",
+      "Never invent volume or difficulty",
+    ],
+    toolsets: ["google_search_console", "bing_webmaster", "database"],
     canMutateProduction: false,
     async run(ctx) {
       const project = await loadProject(ctx);
       if (!project || !ctx.workspaceId) return skip("A registered project and workspace are required");
-      const tokens = await getDecryptedTokens(ctx.db, ctx.workspaceId, "google_search_console");
-      if (!tokens) return skip("Google Search Console is not connected — no keyword volume will be invented");
+
+      const gscTokens = await getDecryptedTokens(ctx.db, ctx.workspaceId, "google_search_console");
+      const bingTokens = await getDecryptedTokens(ctx.db, ctx.workspaceId, "bing_webmaster");
+      if (!gscTokens && !bingTokens) {
+        return skip("No Search Console or Bing Webmaster integration connected — no keyword statistics will be invented");
+      }
 
       const siteUrl =
         (project.metadata as { gscSiteUrl?: string })?.gscSiteUrl ?? project.productionUrl ?? project.domain;
-      if (!siteUrl) return skip("No GSC site URL resolved for this project");
-      const client = new GoogleSearchConsoleClient({ accessToken: tokens.accessToken });
+      if (!siteUrl) return skip("No site URL resolved for this project");
+
+      const retrievedAt = new Date();
       const endDate = new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10);
       const startDate = new Date(Date.now() - 32 * 86_400_000).toISOString().slice(0, 10);
-      const rows = await client.querySearchAnalytics({ siteUrl, startDate, endDate, rowLimit: 1000 });
-      const retrievedAt = new Date();
+      const observed: Array<{
+        keyword: string;
+        country: string;
+        url: string | null;
+        clicks: number;
+        impressions: number;
+        ctr: number;
+        position: number;
+        source: string;
+        sourceUrl: string | null;
+      }> = [];
+      const sources: string[] = [];
+
+      if (gscTokens) {
+        try {
+          const client = new GoogleSearchConsoleClient({ accessToken: gscTokens.accessToken });
+          const rows = await client.querySearchAnalytics({ siteUrl, startDate, endDate, rowLimit: 1000 });
+          for (const row of rows) {
+            const keyword = row.keys?.[0];
+            if (!keyword) continue;
+            observed.push({
+              keyword,
+              country: row.keys?.[2] ?? project.country,
+              url: row.keys?.[1] ?? null,
+              clicks: row.clicks ?? 0,
+              impressions: row.impressions ?? 0,
+              ctr: row.ctr ?? 0,
+              position: row.position ?? 0,
+              source: "google_search_console",
+              sourceUrl: `https://search.google.com/search-console/performance?site=${encodeURIComponent(siteUrl)}`,
+            });
+          }
+          sources.push("google_search_console");
+        } catch {
+          // Keep the run honest: no data from this source on this attempt.
+        }
+      }
+
+      if (bingTokens) {
+        try {
+          const client = new BingWebmasterClient({ accessToken: bingTokens.accessToken });
+          const rows = await client.getQueryStats(siteUrl);
+          for (const row of rows) {
+            const keyword = row.Query;
+            if (!keyword) continue;
+            const clicks = row.Clicks ?? 0;
+            const impressions = row.Impressions ?? 0;
+            observed.push({
+              keyword,
+              country: project.country,
+              url: null,
+              clicks,
+              impressions,
+              ctr: impressions > 0 ? clicks / impressions : 0,
+              position: row.AvgClickPosition ?? row.AvgImpressionPosition ?? 0,
+              source: "bing_webmaster",
+              sourceUrl: "https://www.bing.com/webmasters",
+            });
+          }
+          sources.push("bing_webmaster");
+        } catch {
+          // Keep the run honest: no data from this source on this attempt.
+        }
+      }
+
+      if (!observed.length) return skip("Connected sources returned no query data for this site");
+
+      const competitorRows = await ctx.db
+        .select({ domain: competitors.domain, strengths: competitors.strengths, contentGaps: competitors.contentGaps })
+        .from(competitors)
+        .where(eq(competitors.projectId, project.id));
+      const opportunities = detectOpportunities(observed);
+      const opportunityTerms = new Set(opportunities.map((o) => o.keyword));
 
       let stored = 0;
       const snapshots: Array<{
         id: string;
         country: string;
-        intent: string;
-        position: number | undefined;
-        clicks: number | undefined;
-        impressions: number | undefined;
-        ctr: number | undefined;
+        intent: SearchIntent;
+        position: number;
+        clicks: number;
+        impressions: number;
+        ctr: number;
       }> = [];
-      for (const row of rows) {
-        const term = row.keys?.[0];
-        if (!term) continue;
-        const country = row.keys?.[2] ?? project.country;
-        const intent = inferIntent(term);
+
+      for (const row of observed) {
+        const intent = classifyIntent(row.keyword);
+        const relevance = commercialRelevance({
+          term: row.keyword,
+          intent,
+          clicks: row.clicks,
+          impressions: row.impressions,
+          businessCategory: project.businessCategory,
+        });
+        const priority = businessValueScore({
+          clicks: row.clicks,
+          impressions: row.impressions,
+          ctr: row.ctr,
+          position: row.position,
+          intent,
+          commercialRelevance: relevance,
+        });
+        const competitorUrls = associateCompetitorUrls(row.keyword, competitorRows);
         const existing = await ctx.db
           .select({ id: keywords.id })
           .from(keywords)
-          .where(and(eq(keywords.projectId, project.id), eq(keywords.keyword, term), eq(keywords.country, country)))
+          .where(and(eq(keywords.projectId, project.id), eq(keywords.keyword, row.keyword), eq(keywords.country, row.country)))
           .limit(1);
         const values = {
           currentRank: row.position,
-          source: "google_search_console",
-          sourceUrl: `https://search.google.com/search-console/performance?site=${encodeURIComponent(siteUrl)}`,
+          source: row.source,
+          sourceUrl: row.sourceUrl,
           retrievedAt,
-          competitorUrls: [] as string[],
           intent,
+          commercialRelevance: relevance,
+          priority,
+          competitorUrls,
+          language: project.language,
+          targetUrl: row.url ?? null,
+          notes: opportunityTerms.has(row.keyword)
+            ? "Underserved opportunity derived from observed impressions and CTR."
+            : null,
         };
         let keywordId: string;
         if (existing.length) {
@@ -427,21 +540,13 @@ const definitions: AgentDefinition[] = [
         } else {
           const created = await ctx.db
             .insert(keywords)
-            .values({
-              projectId: project.id,
-              keyword: term,
-              country,
-              language: project.language,
-              targetUrl: row.keys?.[1] ?? null,
-              priority: Math.round((row.clicks ?? 0) * 2 + (row.impressions ?? 0) / 100),
-              ...values,
-            })
+            .values({ projectId: project.id, keyword: row.keyword, country: row.country, ...values })
             .returning({ id: keywords.id });
           keywordId = created[0].id;
         }
         snapshots.push({
           id: keywordId,
-          country,
+          country: row.country,
           intent,
           position: row.position,
           clicks: row.clicks,
@@ -451,25 +556,33 @@ const definitions: AgentDefinition[] = [
         stored++;
       }
 
-      // Country-specific topical clusters, derived only from stored keywords.
-      const clusterGroups = new Map<string, { country: string; intent: string; ids: string[] }>();
+      // Country/intent clusters with an observed target landing page.
+      const clusterGroups = new Map<string, { country: string; intent: SearchIntent; ids: string[]; urls: string[] }>();
       for (const snapshot of snapshots) {
         const name = `${snapshot.country}-${snapshot.intent}`;
-        const group = clusterGroups.get(name) ?? { country: snapshot.country, intent: snapshot.intent, ids: [] };
+        const group = clusterGroups.get(name) ?? { country: snapshot.country, intent: snapshot.intent, ids: [], urls: [] };
         group.ids.push(snapshot.id);
         clusterGroups.set(name, group);
       }
       let clustersCreated = 0;
       for (const [name, group] of clusterGroups) {
+        const targetUrl = observed.find((row) => classifyIntent(row.keyword) === group.intent && row.country === group.country && row.url)?.url ?? null;
         await ctx.db
           .insert(keywordClusters)
           .values({
             projectId: project.id,
             name,
-            description: `Observed ${group.ids.length} keyword(s) for country ${group.country} with ${group.intent} intent.`,
+            description: `Observed ${group.ids.length} keyword(s) for ${group.country} with ${group.intent} intent. Source: ${sources.join(" + ")}.`,
+            targetUrl,
             createdByAgent: "KEYWORD_INTELLIGENCE_AGENT",
           })
-          .onConflictDoNothing();
+          .onConflictDoUpdate({
+            target: [keywordClusters.projectId, keywordClusters.name],
+            set: {
+              description: `Observed ${group.ids.length} keyword(s) for ${group.country} with ${group.intent} intent. Source: ${sources.join(" + ")}.`,
+              targetUrl,
+            },
+          });
         const [cluster] = await ctx.db
           .select({ id: keywordClusters.id })
           .from(keywordClusters)
@@ -483,7 +596,7 @@ const definitions: AgentDefinition[] = [
         }
       }
 
-      // Immutable ranking snapshot; never overwrite prior history.
+      // Immutable ranking snapshot; historical ranks are never overwritten.
       for (const snapshot of snapshots) {
         await ctx.db.insert(keywordHistory).values({
           keywordId: snapshot.id,
@@ -491,18 +604,23 @@ const definitions: AgentDefinition[] = [
           clicks: snapshot.clicks,
           impressions: snapshot.impressions,
           ctr: snapshot.ctr,
-          source: "google_search_console",
+          source: "keyword_research",
           recordedAt: retrievedAt,
         });
       }
 
       return {
-        summary: `Stored ${stored} keyword record(s) from Google Search Console across ${clustersCreated} country/intent cluster(s).`,
+        summary: `Stored ${stored} keyword record(s) from ${sources.join(" + ")}; ${opportunities.length} underserved opportunity(s) across ${clustersCreated} cluster(s).`,
         data: {
           stored,
+          sources,
           clustersCreated,
           historySnapshots: snapshots.length,
-          source: "google_search_console",
+          opportunities: opportunities.length,
+          topOpportunities: opportunities
+            .sort((a, b) => b.impressions - a.impressions)
+            .slice(0, 5)
+            .map((o) => ({ keyword: o.keyword, impressions: o.impressions, position: o.position })),
           startDate,
           endDate,
         },

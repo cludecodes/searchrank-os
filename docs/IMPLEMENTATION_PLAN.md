@@ -114,9 +114,23 @@ schedules, rate limits.
 - [x] End-to-end: 4 artifact proposals generated from audited pages, site analysis
       job executed, artifact approval recorded with reviewer id
 
-### Phase 5 — Keyword intelligence
-Keyword store with source + retrieval date, intent, clusters, history,
-prioritization by business value. No invented volumes.
+### Phase 5 — Keyword intelligence (completed & verified)
+- [x] Keyword research engine with two real sources: GSC search analytics and
+      Bing Webmaster `GetQueryStats` (documented endpoint)
+- [x] Intent classification, commercial relevance scoring, value-based priority
+      (observed clicks/impressions/position/intent — never search volume alone)
+- [x] Underserved-opportunity detection from impressions/CTR/position
+- [x] Country/intent clusters with observed target landing page
+- [x] Immutable keyword history snapshots + computed rank trend
+- [x] Competitor URLs associated only from registered, observed competitors
+- [x] Source + retrieval date on every record; volume/difficulty stay null when
+      unavailable; manual keyword fallback without invented statistics
+- [x] APIs: `/api/keywords` (list/manual), `/api/keywords/[id]`,
+      `/api/keywords/research`, `/api/keywords/clusters`
+- [x] Dedicated `/dashboard/keywords` workspace
+- [x] Tests: 7 new Phase 5 tests (66 total), all passing
+- [x] End-to-end: manual keyword persisted with source=manual/null volume;
+      research job executed and honestly skipped with no connected sources
 
 ### Phase 6 — Content production
 Briefs → drafts → review → approval → publish workflow, originality checks,

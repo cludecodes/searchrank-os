@@ -140,7 +140,7 @@ describe("phase 3 — deeper agent logic", () => {
     expect(clusters.map((c) => c.name)).toContain("GB-transactional");
     const history = await db.select().from(keywordHistory);
     expect(history).toHaveLength(2);
-    expect(history.every((h) => h.source === "google_search_console")).toBe(true);
+    expect(history.every((h) => h.source === "keyword_research")).toBe(true);
     await close();
   });
 

@@ -95,7 +95,7 @@ describe("AI agent workforce", () => {
       ai: mockAI,
       input: {},
     });
-    expect(result.skippedReason).toMatch(/not connected/i);
+    expect(result.skippedReason).toMatch(/integration connected/i);
     await close();
   });
 

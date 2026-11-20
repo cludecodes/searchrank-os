@@ -82,11 +82,12 @@ without GSC, keyword agent skipped without a data source) → visible in `/dashb
 | IndexNow | Working | Multi-engine submission with honest acceptance reporting |
 | Technical SEO audit | Working | Real HTTP/HTML checks, deterministic score, broken links, redirects, duplicates, orphans |
 | SEO artifacts | Working | Framework-aware sitemap/robots/JSON-LD/metadata proposals from verified rows; approval required before applying |
-| Keyword store | Working | Source + retrieval date + history; no invented volumes |
+| Keyword store | Working | Source + retrieval date + history; GSC + Bing query data; value-based priority; no invented volumes/difficulty |
 | Content workflow | Working | Brief → draft → review → approval → publish |
 | 12 agents | Working | Persisted run history; supervisor workflow graph evaluates runs and enqueues evidence-driven jobs; high-risk actions require approval |
 | Agent control UI | Working | `/dashboard/agents` — run agents, preview/execute supervisor plan, review run history and approvals |
-| Keyword clusters & history | Working | Country/intent clusters and immutable ranking snapshots from real GSC data |
+| Keyword clusters & history | Working | Country/intent clusters with target landing page, immutable ranking snapshots and computed trends |
+| Keyword workspace | Working | `/dashboard/keywords` — research trigger, manual fallback, opportunity/priority view |
 | Indexing | Working | Sitemap generated from audited pages; per-URL submission logs; approval gate |
 | Dashboard & reports | Working | All figures computed from persisted rows |
 | Audit trail | Working | Auth, project changes, approvals and agent actions logged |

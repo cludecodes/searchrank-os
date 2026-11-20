@@ -1,0 +1,2 @@
+-- Superseded by 0003 (base_branch column added before first application).
+-- Intentionally a no-op; kept so the migration journal stays contiguous.

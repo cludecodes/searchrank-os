@@ -194,6 +194,67 @@ export class GitHubClient {
     return { html_url: pr.html_url, number: pr.number };
   }
 
+  /** Tip sha of a branch, used as the head ref for checks and reverts. */
+  async getBranchHead(owner: string, repo: string, branch: string): Promise<string> {
+    const commits = await this.http.request<Array<{ sha: string }>>({
+      path: `/repos/${owner}/${repo}/commits/${encodeURIComponent(branch)}`,
+    });
+    return commits[0]?.sha ?? "";
+  }
+
+  async getPullRequest(owner: string, repo: string, number: number): Promise<{
+    number: number;
+    state: string;
+    merged: boolean;
+    head: { sha: string; ref: string };
+    base: { ref: string; sha: string };
+  }> {
+    return this.http.request({ path: `/repos/${owner}/${repo}/pulls/${number}` });
+  }
+
+  /** Merges only when an explicit approval has been recorded by the caller. */
+  async mergePullRequest(
+    owner: string,
+    repo: string,
+    number: number,
+    method: "squash" | "merge" | "rebase" = "squash",
+  ): Promise<{ merged: boolean; sha: string; message: string }> {
+    const result = await this.http.request<{ merged: boolean; sha?: string; message?: string }>({
+      method: "PUT",
+      path: `/repos/${owner}/${repo}/pulls/${number}/merge`,
+      body: { merge_method: method },
+    });
+    return { merged: Boolean(result.merged), sha: result.sha ?? "", message: result.message ?? "" };
+  }
+
+  /** Rollback is itself a reviewed PR — production is never force-pushed. */
+  async createRevertPullRequest(
+    owner: string,
+    repo: string,
+    sha: string,
+    base: string,
+  ): Promise<{ html_url: string; number: number; branch: string }> {
+    const branch = `revert/${sha.slice(0, 12)}`;
+    await this.createBranch(owner, repo, branch, base);
+    const revert = await this.http.request<{ commit: { sha: string } }>({
+      method: "POST",
+      path: `/repos/${owner}/${repo}/git/reverts`,
+      body: { sha },
+    });
+    await this.http.request({
+      method: "PATCH",
+      path: `/repos/${owner}/${repo}/git/refs/heads/${encodeURIComponent(branch)}`,
+      body: { sha: revert.commit.sha, force: false },
+    });
+    const pr = await this.createPullRequest(owner, repo, {
+      title: `Revert ${sha.slice(0, 12)}`,
+      head: branch,
+      base,
+      body: `Automated rollback for commit ${sha}. Requires the same human approval as the original change.`,
+    });
+    return { ...pr, branch };
+  }
+
   async listCheckRuns(owner: string, repo: string, ref: string): Promise<Array<{ name: string; conclusion: string | null; status: string }>> {
     const data = await this.http.request<{ check_runs: Array<{ name: string; conclusion: string | null; status: string }> }>({
       path: `/repos/${owner}/${repo}/commits/${encodeURIComponent(ref)}/check-runs`,

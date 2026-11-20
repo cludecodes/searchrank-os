@@ -75,6 +75,31 @@ export function registerBuiltinHandlers(): void {
   }
 
   registerJobHandler({
+    type: "pipeline.advance",
+    description: "Advance a GitHub/Vercel automation pipeline one stage",
+    async run(ctx) {
+      const { advancePipeline } = await import("../automation/pipeline");
+      const pipelineId = ctx.input.pipelineId as string;
+      if (!pipelineId) throw new Error("pipeline.advance requires pipelineId");
+      const pipeline = await advancePipeline(ctx.db, pipelineId);
+      return { pipelineId, status: pipeline.status, branch: pipeline.branch, prUrl: pipeline.prUrl };
+    },
+  });
+
+  registerJobHandler({
+    type: "pipeline.rollback",
+    description: "Open a reviewed rollback PR for a merged pipeline",
+    async run(ctx) {
+      const { rollbackPipeline } = await import("../automation/pipeline");
+      const pipelineId = ctx.input.pipelineId as string;
+      const approvalId = ctx.input.approvalId as string;
+      if (!pipelineId || !approvalId) throw new Error("pipeline.rollback requires pipelineId and approvalId");
+      const pipeline = await rollbackPipeline(ctx.db, pipelineId, approvalId);
+      return { pipelineId, status: pipeline.status };
+    },
+  });
+
+  registerJobHandler({
     type: "monitoring.uptime",
     description: "Check production site availability",
     async run(ctx) {

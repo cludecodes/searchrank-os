@@ -42,6 +42,20 @@ export type ArtifactKind =
   | "metadata"
   | "sitemap-route";
 export type ArtifactStatus = "proposed" | "approved" | "applied" | "rejected";
+export type PipelineStatus =
+  | "draft"
+  | "awaiting_approval"
+  | "approved"
+  | "branch_created"
+  | "checks_running"
+  | "checks_passed"
+  | "checks_failed"
+  | "pr_open"
+  | "preview_ready"
+  | "awaiting_merge"
+  | "merged"
+  | "reverted"
+  | "rejected";
 export type SearchIntent = "informational" | "navigational" | "transactional" | "commercial";
 export type ContentStatus =
   | "idea"
@@ -335,6 +349,41 @@ export const linkChecks = pgTable(
     checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("link_checks_audit_idx").on(t.auditId)],
+);
+
+export const codePipelines = pgTable(
+  "code_pipelines",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description"),
+    changes: jsonb("changes").$type<Array<{ path: string; content: string }>>().notNull().default([]),
+    branch: text("branch"),
+    baseBranch: text("base_branch"),
+    prNumber: integer("pr_number"),
+    prUrl: text("pr_url"),
+    headSha: text("head_sha"),
+    status: text("status").$type<PipelineStatus>().notNull().default("draft"),
+    steps: jsonb("steps").$type<Array<{ name: string; status: string; detail: string; at: string }>>().notNull().default([]),
+    checks: jsonb("checks").$type<Record<string, unknown>>().notNull().default({}),
+    previewUrl: text("preview_url"),
+    beforeMetrics: jsonb("before_metrics").$type<Record<string, unknown>>().notNull().default({}),
+    afterMetrics: jsonb("after_metrics").$type<Record<string, unknown>>().notNull().default({}),
+    changeApprovalId: uuid("change_approval_id"),
+    mergeApprovalId: uuid("merge_approval_id"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    mergedAt: timestamp("merged_at", { withTimezone: true }),
+    revertedAt: timestamp("reverted_at", { withTimezone: true }),
+  },
+  (t) => [index("code_pipelines_workspace_idx").on(t.workspaceId, t.createdAt)],
 );
 
 export const seoArtifacts = pgTable(
@@ -655,3 +704,4 @@ export type Keyword = InferSelectModel<typeof keywords>;
 export type ContentItem = InferSelectModel<typeof contentItems>;
 export type SeoAudit = InferSelectModel<typeof seoAudits>;
 export type Page = InferSelectModel<typeof pages>;
+export type CodePipeline = InferSelectModel<typeof codePipelines>;

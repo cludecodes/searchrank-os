@@ -15,6 +15,20 @@
       "when": 1795176922867,
       "tag": "0001_robust_loki",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795206583468,
+      "tag": "0002_tricky_human_fly",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1795206870136,
+      "tag": "0003_wise_mister_fear",
+      "breakpoints": true
     }
   ]
 }

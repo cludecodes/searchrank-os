@@ -75,7 +75,8 @@ without GSC, keyword agent skipped without a data source) → visible in `/dashb
 | Job queue | Working | Atomic claiming, retries with backoff, stale-lock recovery, logs |
 | Scheduler | Working | hourly/daily/weekly/monthly schedules + Vercel Cron endpoint |
 | AI abstraction | Working | OpenAI-compatible, Anthropic, or explicit "not configured" |
-| GitHub client | Working | OAuth, public repo discovery, framework detection, branch + PR |
+| GitHub client | Working | OAuth, public repo discovery, framework detection, branch, PR, merge, reviewed revert-PR rollback |
+| Automation pipeline | Working | Approval-gated branch → checks → PR → preview → merge, with audit trail; `/dashboard/automation` |
 | Vercel client | Working | OAuth, project discovery, production deployment info |
 | Google Search Console | Working | OAuth, sites, search analytics, sitemap submission, URL inspection, issue monitoring |
 | Bing Webmaster | Working | Sites, query stats, sitemap/URL submission with quota, crawl issues |

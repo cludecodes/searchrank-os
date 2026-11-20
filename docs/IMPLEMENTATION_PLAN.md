@@ -171,9 +171,23 @@ schedules, rate limits.
 - [x] Tests: 7 new Phase 7 tests (79 total), all passing
 - [x] End-to-end: endpoints and three dashboard pages returned 200; sync job queued
 
-### Phase 8 — GitHub/Vercel automation
-Branch → lint/typecheck/tests → PR → preview → approval → merge/rollback,
-with audit trail.
+### Phase 8 — GitHub/Vercel automation (completed & verified)
+- [x] `code_pipelines` table with immutable step history, approval ids, checks,
+      preview URL and before/after metrics (migration applied to Neon)
+- [x] Real GitHub operations: branch, file writes, branch head, PR, merge and
+      revert-PR rollback — no force-push to production
+- [x] Approval gates: change approval before branch creation, separate merge
+      approval before merge, separate rollback approval before revert PR
+- [x] Check runner abstraction reading real GitHub check-run conclusions;
+      pipelines stop before PR when checks fail
+- [x] Vercel preview discovery from real deployments; deployments persisted
+- [x] Before/after metrics from persisted audit + search-metric rows only
+- [x] APIs `/api/automation/pipelines`, `/api/automation/pipelines/[id]`
+      and `/advance`; job handlers `pipeline.advance`, `pipeline.rollback`
+- [x] `/dashboard/automation` with proposal form, step timeline, approval
+      actions, PR/preview links and metrics delta
+- [x] Tests: 6 new Phase 8 tests (85 total), all passing
+- [x] Full branch → checks → PR → merge → rollback chain tested with mocked APIs
 
 ### Phase 9 — Dashboard
 Premium enterprise UI reading only real persisted data.

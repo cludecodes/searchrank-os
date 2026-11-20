@@ -10,6 +10,13 @@ export async function GET(request: Request, { params }: Params) {
     const { provider } = await params;
     const config = oauthConfig(provider);
     if (!config) return Response.json({ error: "Unknown provider" }, { status: 404 });
+    // Google uses the shared registered callback for both GSC and app sign-in.
+    if (config.provider === "google_search_console") {
+      return new Response(null, {
+        status: 302,
+        headers: { Location: "/api/auth/google/start?purpose=gsc" },
+      });
+    }
     if (!config.isConfigured()) {
       return Response.json(
         { error: `${config.label} OAuth credentials are not configured. Add them to your environment first.` },

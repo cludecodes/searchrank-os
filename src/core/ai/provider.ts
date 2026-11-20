@@ -75,7 +75,7 @@ export class OpenAICompatibleProvider implements AIProvider {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`,
+        ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
       },
       body: JSON.stringify({
         model: request.model ?? this.model,
@@ -190,6 +190,14 @@ export function getAIProvider(): AIProvider {
     });
   } else if (kind === "anthropic" && apiKey) {
     cachedProvider = new AnthropicProvider({ apiKey, model });
+  } else if (kind === "pollinations") {
+    // Free, keyless, open-weight GPT-OSS 20B via Pollinations' OpenAI-compatible API.
+    cachedProvider = new OpenAICompatibleProvider({
+      name: "pollinations-gpt-oss-20b",
+      baseURL: process.env.AI_BASE_URL || "https://text.pollinations.ai/openai",
+      apiKey: "",
+      model: model === "gpt-4o-mini" ? "openai-fast" : model,
+    });
   } else {
     cachedProvider = {
       name: "none",

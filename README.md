@@ -104,7 +104,9 @@ The platform is fully functional locally without external accounts, but live dat
 - `MASTER_ENCRYPTION_KEY` (base64 32 bytes) in production
 - OAuth apps: GitHub, Vercel, Google Search Console, Bing Webmaster
 - `INDEXNOW_KEY` + `INDEXNOW_KEY_LOCATION`
-- `AI_PROVIDER` / `AI_API_KEY` / `AI_MODEL` for article drafting (briefs and editorial workflow work without it)
+- AI is preconfigured with **GPT-OSS 20B** (open-weight, free, keyless) through Pollinations:
+  `AI_PROVIDER=pollinations`, `AI_MODEL=openai-fast`. No AI API key is required.
+  Swap to `openai-compatible`/`anthropic` by setting a provider key if desired.
 - IndexNow is configured and its key file is hosted at
   `https://searchrank-os.vercel.app/4235824ef8038304f94a5590722617b3.txt`. For client
   domains, set `indexNowKey`/`indexNowKeyLocation` in the project's SEO config — the
@@ -143,6 +145,13 @@ docs/IMPLEMENTATION_PLAN.md   phase-by-phase plan and scope
   deeper per-record editing screens are follow-on work.
 - Existing Neon projects in the configured account were left untouched.
 
+## Production data state
+
+All sample/demo rows created during development were removed from the Neon database
+(`pnpm db:seed` identity, workspace and schedules were retained). The production
+dashboard starts empty by design and fills only with real discoveries, audits,
+keywords and content. To repeat the cleanup: `pnpm tsx scripts/clean-sample-data.ts`.
+
 ## Deployment (live)
 
 The `searchrank-os` Vercel project (`prj_IYgnJc0wWivierVKtc1Uk7LuVi6C`) is deployed at
@@ -157,7 +166,7 @@ Configured in Vercel for Production, Preview and Development:
 | `CRON_SECRET` | Protects `/api/cron/scheduler` (Secret) |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URL` | GitHub OAuth |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL` | Google Search Console OAuth |
-| `NEXT_PUBLIC_APP_URL`, `ALLOW_SIGNUPS`, `SESSION_COOKIE_NAME`, `AI_PROVIDER` | App config |
+| `NEXT_PUBLIC_APP_URL`, `ALLOW_SIGNUPS`, `SESSION_COOKIE_NAME`, `AI_PROVIDER`, `AI_MODEL` | App config (AI = free GPT-OSS 20B) |
 
 OAuth redirect URIs that must be registered in the provider consoles:
 

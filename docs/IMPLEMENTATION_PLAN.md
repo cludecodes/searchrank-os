@@ -189,8 +189,18 @@ schedules, rate limits.
 - [x] Tests: 6 new Phase 8 tests (85 total), all passing
 - [x] Full branch → checks → PR → merge → rollback chain tested with mocked APIs
 
-### Phase 9 — Dashboard
-Premium enterprise UI reading only real persisted data.
+### Phase 9 — Dashboard (completed & verified)
+- [x] Executive aggregation service (`executive.ts`) over persisted rows:
+      websites, indexed URLs, audit health, weekly clicks/impressions deltas,
+      position, CTR, top-3/top-10, conversions, clusters, content funnel,
+      indexing checks, deployments, jobs, approvals, agent runs, activity feed
+- [x] Premium overview: health gauge, visibility funnel, content funnel,
+      per-project health bars, system health, activity timeline
+- [x] AI provider switched to free, keyless open-weight GPT-OSS 20B
+      (Pollinations OpenAI-compatible endpoint); live completion verified
+- [x] All sample/demo rows removed from production (22 tables truncated);
+      admin identity, workspace and schedules retained
+- [x] Tests: 3 new Phase 9 tests (88 total), all passing
 
 ### Phase 10 — Business growth engine
 Problem/demand/intent/weakness mapping tied to qualified leads and revenue.

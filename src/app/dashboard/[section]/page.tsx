@@ -4,6 +4,7 @@ import { getRequestContext } from "@/core/auth/request";
 import { getDb } from "@/core/db/client";
 import { getSectionData } from "@/core/reporting/sections";
 import { NAV_ITEMS } from "@/lib/nav";
+import { ManualConnectionForm } from "@/components/ManualConnectionForm";
 
 export const dynamic = "force-dynamic";
 
@@ -26,13 +27,16 @@ export default async function SectionPage({ params }: Params) {
       </section>
 
       {(section === "github" || section === "vercel") && (
-        <div className="card flex flex-wrap items-center justify-between gap-4 p-5">
-          <div>
-            <h2 className="text-sm font-semibold">OAuth connection</h2>
-            <p className="mt-1 text-xs text-slate-500">Least-privilege scopes. Tokens are encrypted at rest; private repositories are never imported.</p>
+        <>
+          <div className="card flex flex-wrap items-center justify-between gap-4 p-5">
+            <div>
+              <h2 className="text-sm font-semibold">OAuth connection</h2>
+              <p className="mt-1 text-xs text-slate-500">Least-privilege scopes. Tokens are encrypted at rest; private repositories are never imported.</p>
+            </div>
+            <a className="btn btn-primary" href={`/api/integrations/${section}/start`}>Connect {section === "github" ? "GitHub" : "Vercel"}</a>
           </div>
-          <a className="btn btn-primary" href={`/api/integrations/${section}/start`}>Connect {section === "github" ? "GitHub" : "Vercel"}</a>
-        </div>
+          <ManualConnectionForm provider={section} label={section === "github" ? "GitHub" : "Vercel"} />
+        </>
       )}
 
       <div className="card overflow-hidden">

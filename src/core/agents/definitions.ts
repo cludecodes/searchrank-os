@@ -31,6 +31,8 @@ import { BingWebmasterClient } from "../integrations/bing-webmaster";
 import { submitToIndexNow } from "../integrations/indexnow";
 import { auditUrl, checkRobotsAndSitemap, generateSitemap } from "../seo/audit";
 import { persistAudit } from "../seo/persist";
+import { generateArtifacts, saveArtifacts } from "../seo/artifacts";
+import { analyzeSite } from "../seo/site-audit";
 import { enqueueJob } from "../jobs/queue";
 
 function slugify(value: string): string {
@@ -323,19 +325,43 @@ const definitions: AgentDefinition[] = [
     canMutateProduction: false,
     async run(ctx) {
       const project = await loadProject(ctx);
-      const url = (ctx.input.url as string | undefined) ?? project?.productionUrl;
+      if (!project) return skip("A registered project is required");
+
+      const mode = ctx.input.mode as string | undefined;
+      if (mode === "site-analysis") {
+        const analysis = await analyzeSite(ctx.db, project.id);
+        return {
+          summary: `Analyzed ${analysis.pageCount} audited page(s): ${analysis.issues.length} site-wide issue(s).`,
+          data: {
+            pageCount: analysis.pageCount,
+            issues: analysis.issues.map((i) => ({ id: i.id, title: i.title, affectedUrls: i.affectedUrls })),
+            orphanUrls: analysis.orphanUrls,
+          },
+        };
+      }
+
+      if (mode === "generate-artifacts") {
+        const rows = await ctx.db.select().from(pages).where(eq(pages.projectId, project.id));
+        const artifacts = generateArtifacts(project, rows, project.framework);
+        if (!artifacts.length) return skip("No verified page URLs available — run an audit first");
+        const saved = await saveArtifacts(ctx.db, project.id, artifacts, {
+          createdByAgent: "TECHNICAL_SEO_AGENT",
+        });
+        return {
+          summary: `Generated ${saved} SEO artifact proposal(s) from verified data.`,
+          data: { generated: saved, paths: artifacts.map((a) => a.path) },
+        };
+      }
+
+      const url = (ctx.input.url as string | undefined) ?? project.productionUrl;
       if (!url) return skip("No production URL registered for this project");
       const result = await auditUrl(url);
-      let auditId: string | null = null;
-      if (project) {
-        const persisted = await persistAudit(ctx.db, project.id, result, ctx.jobId);
-        auditId = persisted.auditId;
-      }
+      const persisted = await persistAudit(ctx.db, project.id, result, ctx.jobId);
       const failures = result.findings.filter((f) => f.severity !== "pass");
       return {
         summary: `Audited ${result.auditedUrl}: score ${result.score}, ${failures.length} finding(s).`,
         data: {
-          auditId,
+          auditId: persisted.auditId,
           score: result.score,
           findingCount: failures.length,
           findings: failures.map(({ id, severity, title }) => ({ id, severity, title })),

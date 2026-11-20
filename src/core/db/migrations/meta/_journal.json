@@ -8,6 +8,13 @@
       "when": 1795159573927,
       "tag": "0000_aberrant_serpent_society",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1795176922867,
+      "tag": "0001_robust_loki",
+      "breakpoints": true
     }
   ]
 }

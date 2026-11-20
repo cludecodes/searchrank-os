@@ -36,9 +36,13 @@ export interface PageSnapshot {
   h1Count: number;
   headingOutline: Array<{ level: number; text: string }>;
   openGraph: Record<string, string>;
+  twitterCard: string | null;
   structuredDataTypes: string[];
+  structuredData: Array<Record<string, unknown>>;
+  viewport: string | null;
   imagesTotal: number;
   imagesMissingAlt: number;
+  imagesMissingDimensions: number;
   internalLinks: string[];
   externalLinks: string[];
   wordCount: number;
@@ -52,6 +56,14 @@ export interface LinkCheck {
   kind: "internal" | "external";
   statusCode: number | null;
   isBroken: boolean;
+}
+
+export interface RedirectCheck {
+  from: string;
+  chain: string[];
+  finalUrl: string;
+  statusCodes: number[];
+  loop: boolean;
 }
 
 export interface RobotsSitemapCheck {
@@ -70,6 +82,7 @@ export interface AuditResult {
   page: PageSnapshot | null;
   robotsSitemap: RobotsSitemapCheck;
   linkChecks: LinkCheck[];
+  redirects: RedirectCheck | null;
   limitations: string[];
 }
 
@@ -125,6 +138,47 @@ async function fetchWithTimeout(
   }
 }
 
+/** Follows redirects manually so chains and loops can be reported accurately. */
+export async function checkRedirects(
+  url: string,
+  options: AuditOptions = {},
+): Promise<RedirectCheck> {
+  const chain: string[] = [];
+  const statusCodes: number[] = [];
+  const seen = new Set<string>();
+  let current = url;
+  let loop = false;
+
+  for (let hop = 0; hop < 6; hop++) {
+    if (seen.has(current)) { loop = true; break; }
+    seen.add(current);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 8_000);
+    try {
+      const response = await (options.fetchImpl ?? globalThis.fetch)(current, {
+        headers: { "User-Agent": options.userAgent ?? DEFAULT_UA },
+        redirect: "manual",
+        signal: controller.signal,
+      });
+      statusCodes.push(response.status);
+      const location = response.headers?.get?.("location");
+      if (response.status >= 300 && response.status < 400 && location) {
+        const next = new URL(location, current).toString();
+        chain.push(next);
+        current = next;
+        continue;
+      }
+      break;
+    } catch {
+      break;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return { from: url, chain, finalUrl: current, statusCodes, loop };
+}
+
 function absoluteUrl(href: string, base: string): string | null {
   try {
     const url = new URL(href, base);
@@ -165,13 +219,17 @@ export function parsePage(html: string, finalUrl: string, ttfbMs: number): PageS
     const value = $(el).attr("content");
     if (key && value) openGraph[key] = value;
   });
+  const twitterCard = $("meta[name='twitter:card']").first().attr("content")?.trim() ?? null;
+  const viewport = $("meta[name='viewport']").first().attr("content")?.trim() ?? null;
 
   const structuredDataTypes: string[] = [];
+  const structuredData: Array<Record<string, unknown>> = [];
   $("script[type='application/ld+json']").each((_, el) => {
     try {
       const parsed = JSON.parse($(el).html() ?? "") as unknown;
       const entries = Array.isArray(parsed) ? parsed : [parsed];
       for (const entry of entries) {
+        if (entry && typeof entry === "object") structuredData.push(entry as Record<string, unknown>);
         const type = (entry as { "@type"?: unknown })?.["@type"];
         if (typeof type === "string") structuredDataTypes.push(type);
         else if (Array.isArray(type)) structuredDataTypes.push(...type.filter((t): t is string => typeof t === "string"));
@@ -183,10 +241,12 @@ export function parsePage(html: string, finalUrl: string, ttfbMs: number): PageS
 
   let imagesTotal = 0;
   let imagesMissingAlt = 0;
+  let imagesMissingDimensions = 0;
   $("img").each((_, el) => {
     imagesTotal++;
     const alt = $(el).attr("alt");
     if (alt === undefined || alt.trim() === "") imagesMissingAlt++;
+    if (!$(el).attr("width") || !$(el).attr("height")) imagesMissingDimensions++;
   });
 
   const internal = new Set<string>();
@@ -213,9 +273,13 @@ export function parsePage(html: string, finalUrl: string, ttfbMs: number): PageS
     h1Count: headings.filter((h) => h.level === 1).length,
     headingOutline: headings,
     openGraph,
+    twitterCard,
     structuredDataTypes,
+    structuredData,
+    viewport,
     imagesTotal,
     imagesMissingAlt,
+    imagesMissingDimensions,
     internalLinks: [...internal],
     externalLinks: [...external],
     wordCount,
@@ -302,6 +366,23 @@ export function evaluatePage(snapshot: PageSnapshot, declaredSitemap: boolean): 
     findings.push(finding("heading.skipped", "semantics", "info", "Heading levels skip a rank", "At least one heading jumps more than one level.", 2, "Keep heading hierarchy sequential."));
   }
 
+  // Ratings/testimonials cannot be verified from HTML. Flag for human review
+  // rather than accepting or emitting fabricated structured data.
+  const unverifiableMarkup = snapshot.structuredData.filter(
+    (entry) => "aggregateRating" in entry || "review" in entry || "testimonial" in entry,
+  );
+  if (unverifiableMarkup.length) {
+    findings.push(finding(
+      "structured-data.unverifiable",
+      "structured-data",
+      "critical",
+      "Unverifiable rating/review markup detected",
+      `${unverifiableMarkup.length} structured-data block(s) contain aggregateRating, review or testimonial fields. These cannot be validated from HTML.`,
+      10,
+      "Remove unless the rating is real and independently verifiable. Never fabricate ratings or testimonials.",
+    ));
+  }
+
   if (snapshot.structuredDataTypes.length === 0) {
     findings.push(finding("structured-data.missing", "structured-data", "info", "No structured data detected", "No valid JSON-LD types were found.", 2, "Add structured data only when it describes real, verifiable entities."));
   } else if (snapshot.structuredDataTypes.includes("InvalidJSONLD")) {
@@ -313,6 +394,13 @@ export function evaluatePage(snapshot: PageSnapshot, declaredSitemap: boolean): 
   if (snapshot.imagesMissingAlt > 0) {
     findings.push(finding("images.alt", "images", "warning", "Images missing alt text", `${snapshot.imagesMissingAlt} of ${snapshot.imagesTotal} images have no alt attribute.`, 5, "Add descriptive alt text; use alt=\"\" for decorative images."));
   }
+  if (snapshot.imagesMissingDimensions > 0) {
+    findings.push(finding("images.dimensions", "images", "info", "Images without declared dimensions", `${snapshot.imagesMissingDimensions} of ${snapshot.imagesTotal} images omit width/height, which can cause layout shift.`, 2, "Declare intrinsic width and height or an aspect-ratio."));
+  }
+
+  if (!snapshot.viewport) {
+    findings.push(finding("viewport.missing", "crawlability", "warning", "No viewport meta tag", "The page does not declare a viewport, so mobile rendering may be poor.", 5, "Add <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">. True mobile friendliness still requires lab/field data."));
+  }
 
   if (snapshot.wordCount < 150) {
     findings.push(finding("content.thin", "content", "warning", "Low visible text volume", `Approximately ${snapshot.wordCount} visible words.`, 5, "Add genuinely useful content that answers search intent."));
@@ -320,6 +408,12 @@ export function evaluatePage(snapshot: PageSnapshot, declaredSitemap: boolean): 
 
   if (!snapshot.openGraph.title || !snapshot.openGraph.description) {
     findings.push(finding("og.incomplete", "social", "info", "Open Graph metadata incomplete", "og:title and/or og:description missing.", 2, "Complete Open Graph metadata for social sharing."));
+  }
+  if (!snapshot.openGraph.image) {
+    findings.push(finding("og.image.missing", "social", "info", "No og:image declared", "Social shares will not have a preview image.", 1, "Add an og:image pointing to a real image."));
+  }
+  if (!snapshot.twitterCard) {
+    findings.push(finding("twitter.card.missing", "social", "info", "No Twitter card declared", "twitter:card meta tag is absent.", 1, "Add twitter:card=summary_large_image when appropriate."));
   }
 
   if (!declaredSitemap) {
@@ -361,6 +455,12 @@ export async function auditUrl(url: string, options: AuditOptions = {}): Promise
 
   const base = `${target.protocol}//${target.host}`;
   const robotsSitemap = await checkRobotsAndSitemap(base, options);
+  const redirects = await checkRedirects(target.toString(), options);
+  if (redirects.loop) {
+    findings.push(finding("redirect.loop", "crawlability", "critical", "Redirect loop detected", redirects.chain.join(" → "), 15, "Break the redirect cycle."));
+  } else if (redirects.chain.length > 2) {
+    findings.push(finding("redirect.chain", "crawlability", "warning", `Redirect chain of ${redirects.chain.length} hops`, redirects.chain.join(" → "), 4, "Point links directly at the final URL."));
+  }
   if (page) findings.push(...evaluatePage(page, robotsSitemap.sitemapDeclared.length > 0));
 
   const maxChecks = options.maxLinkChecks ?? 10;
@@ -393,6 +493,7 @@ export async function auditUrl(url: string, options: AuditOptions = {}): Promise
     page,
     robotsSitemap,
     linkChecks,
+    redirects,
     limitations,
   };
 }

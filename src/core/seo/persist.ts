@@ -39,6 +39,15 @@ export async function persistAudit(
         hasStructuredData: p.structuredDataTypes.length > 0,
         contentHash: p.contentHash,
         lastAuditedAt: new Date(),
+        metadata: {
+          internalLinks: p.internalLinks,
+          externalLinks: p.externalLinks,
+          imagesMissingAlt: p.imagesMissingAlt,
+          imagesMissingDimensions: p.imagesMissingDimensions,
+          viewport: p.viewport,
+          openGraph: p.openGraph,
+          structuredDataTypes: p.structuredDataTypes,
+        } as Record<string, unknown>,
       })
       .onConflictDoUpdate({
         target: [pages.projectId, pages.url],
@@ -53,6 +62,15 @@ export async function persistAudit(
           contentHash: p.contentHash,
           lastAuditedAt: new Date(),
           updatedAt: new Date(),
+          metadata: {
+            internalLinks: p.internalLinks,
+            externalLinks: p.externalLinks,
+            imagesMissingAlt: p.imagesMissingAlt,
+            imagesMissingDimensions: p.imagesMissingDimensions,
+            viewport: p.viewport,
+            openGraph: p.openGraph,
+            structuredDataTypes: p.structuredDataTypes,
+          } as Record<string, unknown>,
         },
       });
   }

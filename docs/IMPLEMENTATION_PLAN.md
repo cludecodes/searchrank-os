@@ -97,9 +97,22 @@ schedules, rate limits.
 - [x] End-to-end: supervisor plan → 3 jobs → worker → 3 persisted agent runs
       (audit score 72, honest skip for disconnected sources)
 
-### Phase 4 — Technical SEO automation
-Real audit execution, sitemap/robots generation, structured-data validation,
-broken-link and orphan-page detection. Never fabricate data.
+### Phase 4 — Technical SEO automation (completed & verified)
+- [x] Deep HTML checks: viewport/mobile signal, image alt + intrinsic dimensions,
+      Open Graph/Twitter completeness, JSON-LD parsing
+- [x] Fabricated rating/review markup flagged for human review (never emitted)
+- [x] Real redirect-chain and redirect-loop detection
+- [x] Site-wide analysis: duplicate content/titles/descriptions + orphan pages
+      from persisted audit link graphs
+- [x] Framework-aware artifact generation (Next.js sitemap route vs static XML,
+      robots.txt, Organization JSON-LD, metadata suggestions) from verified rows only
+- [x] `seo_artifacts` table with proposal → approved/rejected workflow + audit log
+- [x] Job handlers: `seo.artifacts.generate`, `seo.site.analysis`
+- [x] APIs: `/api/seo/artifacts` (list/generate/decide), `/api/seo/site-audit`
+- [x] Dedicated `/dashboard/audits` workspace with findings evidence and artifact review
+- [x] Tests: 8 new Phase 4 tests (59 total), all passing
+- [x] End-to-end: 4 artifact proposals generated from audited pages, site analysis
+      job executed, artifact approval recorded with reviewer id
 
 ### Phase 5 — Keyword intelligence
 Keyword store with source + retrieval date, intent, clusters, history,

@@ -8,7 +8,8 @@ import { listJobHandlers } from "@/core/jobs/runner";
 import { registerBuiltinHandlers } from "@/core/jobs/handlers";
 
 const ALLOWED = new Set([
-  "agent.run", "supervisor.daily", "discovery.sync", "seo.audit", "keywords.sync",
+  "agent.run", "supervisor.daily", "discovery.sync", "seo.audit",
+  "seo.artifacts.generate", "seo.site.analysis", "keywords.sync",
   "competitor.monitor", "content.strategy", "content.produce", "links.authority",
   "developer.propose", "indexing.submit", "analytics.sync", "quality.review",
   "monitoring.uptime", "scheduler.tick", "report.generate",

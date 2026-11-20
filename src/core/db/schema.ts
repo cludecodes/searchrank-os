@@ -35,6 +35,13 @@ export type ProjectStatus = "discovered" | "active" | "archived" | "error";
 export type JobStatus = "pending" | "running" | "succeeded" | "failed" | "cancelled";
 export type JobPriority = "low" | "normal" | "high" | "critical";
 export type AuditStatus = "pending" | "running" | "completed" | "failed";
+export type ArtifactKind =
+  | "sitemap"
+  | "robots"
+  | "structured-data"
+  | "metadata"
+  | "sitemap-route";
+export type ArtifactStatus = "proposed" | "approved" | "applied" | "rejected";
 export type SearchIntent = "informational" | "navigational" | "transactional" | "commercial";
 export type ContentStatus =
   | "idea"
@@ -328,6 +335,29 @@ export const linkChecks = pgTable(
     checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("link_checks_audit_idx").on(t.auditId)],
+);
+
+export const seoArtifacts = pgTable(
+  "seo_artifacts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    auditId: uuid("audit_id").references(() => seoAudits.id, { onDelete: "set null" }),
+    kind: text("kind").$type<ArtifactKind>().notNull(),
+    path: text("path").notNull(),
+    content: text("content").notNull(),
+    framework: text("framework"),
+    status: text("status").$type<ArtifactStatus>().notNull().default("proposed"),
+    rationale: text("rationale"),
+    createdByAgent: text("created_by_agent"),
+    reviewedBy: uuid("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("seo_artifacts_project_kind_path_unique").on(t.projectId, t.kind, t.path)],
 );
 
 export const indexingSubmissions = pgTable(
@@ -624,3 +654,4 @@ export type AgentRun = InferSelectModel<typeof agentRuns>;
 export type Keyword = InferSelectModel<typeof keywords>;
 export type ContentItem = InferSelectModel<typeof contentItems>;
 export type SeoAudit = InferSelectModel<typeof seoAudits>;
+export type Page = InferSelectModel<typeof pages>;

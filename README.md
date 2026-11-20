@@ -80,7 +80,8 @@ without GSC, keyword agent skipped without a data source) → visible in `/dashb
 | Google Search Console | Working | OAuth, sites, search analytics, sitemaps, URL inspection |
 | Bing Webmaster | Working | OAuth, sites, quota, URL batch + sitemap submission |
 | IndexNow | Working | Multi-engine submission with honest acceptance reporting |
-| Technical SEO audit | Working | Real HTTP/HTML checks, deterministic score, broken-link checks |
+| Technical SEO audit | Working | Real HTTP/HTML checks, deterministic score, broken links, redirects, duplicates, orphans |
+| SEO artifacts | Working | Framework-aware sitemap/robots/JSON-LD/metadata proposals from verified rows; approval required before applying |
 | Keyword store | Working | Source + retrieval date + history; no invented volumes |
 | Content workflow | Working | Brief → draft → review → approval → publish |
 | 12 agents | Working | Persisted run history; supervisor workflow graph evaluates runs and enqueues evidence-driven jobs; high-risk actions require approval |

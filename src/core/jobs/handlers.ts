@@ -33,6 +33,8 @@ export function registerBuiltinHandlers(): void {
     ["supervisor.daily", "CHIEF_SUPERVISOR", "Daily supervisor planning"],
     ["discovery.sync", "PROJECT_DISCOVERY_AGENT", "Sync GitHub/Vercel project registry"],
     ["seo.audit", "TECHNICAL_SEO_AGENT", "Run a live technical SEO audit"],
+    ["seo.artifacts.generate", "TECHNICAL_SEO_AGENT", "Generate framework-aware SEO artifact proposals"],
+    ["seo.site.analysis", "TECHNICAL_SEO_AGENT", "Detect duplicate content and orphan pages"],
     ["keywords.sync", "KEYWORD_INTELLIGENCE_AGENT", "Import real GSC keyword data"],
     ["competitor.monitor", "COMPETITOR_INTELLIGENCE_AGENT", "Analyze registered competitors"],
     ["content.strategy", "CONTENT_STRATEGY_AGENT", "Generate evidence-based content briefs"],

@@ -20,12 +20,13 @@ export async function GET(request: Request, { params }: Params) {
     const state = randomToken(24);
     const redirectUri = oauthRedirectUri(config.provider, request.url);
     const url = config.authorize(clientId, redirectUri, state);
-    const response = Response.redirect(url, 302);
-    response.headers.append(
-      "Set-Cookie",
-      `sr_oauth_state=${config.provider}:${state}; HttpOnly; Path=/; SameSite=Lax; Max-Age=600${process.env.NODE_ENV === "production" ? "; Secure" : ""}`,
-    );
-    return response;
+    // Response.redirect() produces immutable headers; construct the response
+    // directly so the state cookie can be attached.
+    const cookie = `sr_oauth_state=${config.provider}:${state}; HttpOnly; Path=/; SameSite=Lax; Max-Age=600${process.env.NODE_ENV === "production" ? "; Secure" : ""}`;
+    return new Response(null, {
+      status: 302,
+      headers: { Location: url, "Set-Cookie": cookie },
+    });
   } catch (error) {
     return apiErrorResponse(error);
   }

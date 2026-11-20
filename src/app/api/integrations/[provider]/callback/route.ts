@@ -39,9 +39,15 @@ export async function GET(request: Request, { params }: Params) {
       metadata: { connectedAt: new Date().toISOString() },
     });
 
-    const response = Response.redirect(new URL(`/dashboard/integrations?connected=${provider}`, request.url), 302);
-    response.headers.append("Set-Cookie", "sr_oauth_state=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0");
-    return response;
+    // Response.redirect() has immutable headers; build the response with the
+    // cookie already in place so the one-time state is cleared safely.
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: new URL(`/dashboard/integrations?connected=${provider}`, request.url).toString(),
+        "Set-Cookie": "sr_oauth_state=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0",
+      },
+    });
   } catch (error) {
     return apiErrorResponse(error);
   }

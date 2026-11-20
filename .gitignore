@@ -10,3 +10,7 @@ dist
 .turbo
 .DS_Store
 drizzle/meta/_journal.json.bak
+
+.vercel
+.env*
+tsconfig.tsbuildinfo

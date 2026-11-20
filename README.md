@@ -126,9 +126,32 @@ docs/IMPLEMENTATION_PLAN.md   phase-by-phase plan and scope
   deeper per-record editing screens are follow-on work.
 - Existing Neon projects in the configured account were left untouched.
 
-## Deployment
+## Deployment (live)
+
+The `searchrank-os` Vercel project (`prj_IYgnJc0wWivierVKtc1Uk7LuVi6C`) is deployed at
+**https://searchrank-os.vercel.app** and verified healthy (`/api/health`).
+
+Configured in Vercel for Production, Preview and Development:
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | Dedicated Neon Postgres project `searchrank-os` (migrations + seed applied) |
+| `MASTER_ENCRYPTION_KEY` | AES-256-GCM key for OAuth credentials at rest (Secret) |
+| `CRON_SECRET` | Protects `/api/cron/scheduler` (Secret) |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URL` | GitHub OAuth |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL` | Google Search Console OAuth |
+| `NEXT_PUBLIC_APP_URL`, `ALLOW_SIGNUPS`, `SESSION_COOKIE_NAME`, `AI_PROVIDER` | App config |
+
+OAuth redirect URIs that must be registered in the provider consoles:
+
+- `https://searchrank-os.vercel.app/api/integrations/github/callback`
+- `https://searchrank-os.vercel.app/api/integrations/google_search_console/callback`
+
+Not yet configured (no credentials provided): Vercel OAuth client, Bing Webmaster OAuth,
+IndexNow key, AI provider. The dashboard reports these honestly as not configured.
+
+Vercel Cron runs once daily on the Hobby plan (`0 3 * * *`) and calls
+`/api/cron/scheduler` with `Authorization: Bearer $CRON_SECRET`. Queued jobs are executed
+by a worker (`pnpm worker`) or a scheduled `pnpm worker:once`.
 
 Docker: set `DATABASE_URL` to Neon, create `.env`, then `docker compose up --build`.
-Vercel: import the repo, set the environment variables above, and deploy. Vercel Cron calls
-`/api/cron/scheduler` every five minutes; run a worker (or a scheduled `worker:once`) to
-execute queued jobs.

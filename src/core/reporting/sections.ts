@@ -1,6 +1,7 @@
 import { desc, eq, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { getAIProvider } from "../ai/provider";
+import { getEnvStatus, missingRequiredEnv } from "../config/env-status";
 import { OAUTH_PROVIDERS } from "../integrations/oauth";
 import { listAgents } from "../agents/framework";
 import { registerBuiltinHandlers } from "../jobs/handlers";
@@ -246,18 +247,49 @@ export async function getSectionData(db: Database, workspaceId: string, section:
     }
     case "settings": {
       const ai = getAIProvider();
+      const envRows = getEnvStatus();
+      const connected = await db.select({ provider: integrations.provider, status: integrations.status })
+        .from(integrations).where(eq(integrations.workspaceId, workspaceId));
+      const rows: Record<string, string>[] = [
+        {
+          "Variable": "— runtime —",
+          "Purpose": `Database: ${process.env.DATABASE_URL ? "Neon serverless Postgres" : "Embedded PGlite"}; AI: ${ai.name}`,
+          "Required": "—",
+          "Secret": "—",
+          "Status": "Active",
+          "Value / detail": "Runtime capabilities",
+        },
+        ...envRows.map((v) => ({
+          "Variable": v.name,
+          "Purpose": v.purpose,
+          "Required": v.required ? "yes" : "no",
+          "Secret": v.secret ? "yes" : "no",
+          "Status": v.configured ? "Configured" : (v.required ? "MISSING" : "optional"),
+          "Value / detail": v.detail,
+        })),
+        ...Object.keys(OAUTH_PROVIDERS).map((provider) => {
+          const live = connected.find((c) => c.provider === provider);
+          return {
+            "Variable": `connection:${provider}`,
+            "Purpose": "Stored encrypted integration credential",
+            "Required": "no",
+            "Secret": "yes",
+            "Status": live ? live.status : "not connected",
+            "Value / detail": live ? "value hidden" : "no stored credential",
+          };
+        }),
+      ];
       return {
         title: "Settings",
-        subtitle: "Environment capabilities. Secrets are never displayed.",
-        columns: ["Capability", "Status", "Detail"],
-        rows: [
-          { Capability: "Database", Status: "Active", Detail: process.env.DATABASE_URL ? "Neon serverless Postgres" : "Embedded PGlite Postgres" },
-          { Capability: "AI provider", Status: ai.name === "none" ? "Not configured" : "Configured", Detail: ai.name },
-          ...Object.values(OAUTH_PROVIDERS).map((p) => ({ Capability: p.label, Status: p.isConfigured() ? "Configured" : "Not configured", Detail: `${p.scopes.length} scope(s)` })),
-          { Capability: "IndexNow", Status: process.env.INDEXNOW_KEY ? "Configured" : "Not configured", Detail: "Key value hidden" },
-          { Capability: "Master encryption key", Status: process.env.MASTER_ENCRYPTION_KEY ? "Configured" : "Development fallback", Detail: "Value hidden" },
+        subtitle: "Every environment variable the platform needs, with its real configuration state. Secret values are never displayed.",
+        columns: ["Variable", "Purpose", "Required", "Secret", "Status", "Value / detail"],
+        rows,
+        notes: [
+          "Set local variables in .env.local and production variables in the Vercel project (Production, Preview, Development).",
+          "Required variables currently missing: " + (missingRequiredEnv().join(", ") || "none"),
+          "Vercel API token is stored encrypted in the integration registry and mirrored as a Vercel Secret.",
+          "OAuth redirect URIs must be registered in each provider's console; a manual token connection works without them.",
         ],
-        notes: ["Configure variables in .env.local (local) or your hosting provider (production). See .env.example."],
       };
     }
     default:

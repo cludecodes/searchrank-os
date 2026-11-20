@@ -198,6 +198,10 @@ schedules, rate limits.
       per-project health bars, system health, activity timeline
 - [x] AI provider switched to free, keyless open-weight GPT-OSS 20B
       (Pollinations OpenAI-compatible endpoint); live completion verified
+- [x] Vercel API token configured (env Secret + encrypted integration registry)
+      with project id; Settings now lists every required variable and its real
+      state without exposing secret values
+- [x] Configuration tests added (2); 90 total tests passing
 - [x] All sample/demo rows removed from production (22 tables truncated);
       admin identity, workspace and schedules retained
 - [x] Tests: 3 new Phase 9 tests (88 total), all passing

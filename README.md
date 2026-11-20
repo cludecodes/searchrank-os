@@ -167,6 +167,7 @@ Configured in Vercel for Production, Preview and Development:
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URL` | GitHub OAuth |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL` | Google Search Console OAuth |
 | `NEXT_PUBLIC_APP_URL`, `ALLOW_SIGNUPS`, `SESSION_COOKIE_NAME`, `AI_PROVIDER`, `AI_MODEL` | App config (AI = free GPT-OSS 20B) |
+| `VERCEL_TOKEN`, `VERCEL_PROJECT_ID` | Vercel API access for deployments/previews (Secret + id); token also stored encrypted in the integration registry |
 
 OAuth redirect URIs that must be registered in the provider consoles:
 

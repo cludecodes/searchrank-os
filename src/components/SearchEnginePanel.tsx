@@ -94,6 +94,11 @@ export function SearchEnginePanel({ focus }: { focus: "google" | "bing" | "index
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {!engine?.connected && focus !== "indexing" && (
+              <a className="btn btn-primary text-xs" href={`/api/integrations/${focus === "google" ? "google_search_console" : "bing_webmaster"}/start`}>
+                Connect {focus === "google" ? "Google" : "Bing"}
+              </a>
+            )}
             <button className="btn btn-ghost text-xs" disabled={busy || !data?.project} onClick={() => act("sync")}>Sync performance</button>
             <button className="btn btn-ghost text-xs" disabled={busy || !data?.project} onClick={() => act("monitor")}>Check indexing issues</button>
             {focus === "google" && (
@@ -114,6 +119,18 @@ export function SearchEnginePanel({ focus }: { focus: "google" | "bing" | "index
           <ul className="mt-3 list-inside list-disc text-xs text-slate-400">
             {engine.sites.map((site) => <li key={site}>{site}</li>)}
           </ul>
+        )}
+        {!engine?.connected && focus === "google" && (
+          <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-[11px] text-amber-200/90">
+            <p className="font-semibold">Google setup required</p>
+            <p className="mt-1">
+              In Google Cloud Console → APIs &amp; Services → Credentials → OAuth client, add this exact authorized redirect URI:
+            </p>
+            <code className="mt-1 block break-all rounded bg-ink-950/70 p-2 text-brand-300">
+              https://searchrank-os.vercel.app/api/integrations/google_search_console/callback
+            </code>
+            <p className="mt-1">Then click “Connect Google”. Google rejects sign-in until this URI is registered (redirect_uri_mismatch).</p>
+          </div>
         )}
         {focus === "indexing" && data?.edge && (
           <div className="mt-4 rounded-lg border border-slate-700/40 p-3 text-xs text-slate-400">

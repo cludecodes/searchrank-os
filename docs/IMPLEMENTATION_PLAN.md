@@ -152,9 +152,24 @@ schedules, rate limits.
 - [x] End-to-end: brief job → worker → evidence-based brief → full transition
       chain to published; invalid jumps blocked with 409
 
-### Phase 7 — Search engine integration
-GSC/Bing OAuth + performance sync + sitemap submission; IndexNow notifications.
-No indexing guarantees.
+### Phase 7 — Search engine integration (completed & verified)
+- [x] Google Search Console: site listing, search analytics, sitemap submission,
+      URL inspection and sitemap issue monitoring — all via real API calls
+- [x] Bing Webmaster: site listing, query stats, sitemap submission, URL batch
+      submission within real daily quota, crawl-issue monitoring
+- [x] Microsoft Edge visibility derived honestly from Bing data (no separate API claim)
+- [x] Approval gates for sitemap/URL submissions; IndexNow with per-project key location
+- [x] Service layer `src/core/search-engines/service.ts` with real provider responses
+      and persisted submission/check/metric records
+- [x] Agents: new modes on INDEXING_AGENT and ANALYTICS_AGENT; job handlers
+      `search.sync`, `search.issues.monitor`, `search.sitemap.submit`,
+      `search.url.inspect`, `search.bing.urls`
+- [x] APIs `/api/search-engines` and `/api/search-engines/actions`; dedicated
+      `/dashboard/google`, `/dashboard/bing`, `/dashboard/indexing` pages
+- [x] Honest behavior: no connected engine → sync returns 0 rows, actions skip
+      with a reason; acceptance is never presented as indexing guarantee
+- [x] Tests: 7 new Phase 7 tests (79 total), all passing
+- [x] End-to-end: endpoints and three dashboard pages returned 200; sync job queued
 
 ### Phase 8 — GitHub/Vercel automation
 Branch → lint/typecheck/tests → PR → preview → approval → merge/rollback,

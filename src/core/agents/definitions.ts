@@ -38,6 +38,13 @@ import { VercelClient, type VercelDeployment } from "../integrations/vercel";
 import { GoogleSearchConsoleClient } from "../integrations/google-search-console";
 import { BingWebmasterClient } from "../integrations/bing-webmaster";
 import { submitToIndexNow } from "../integrations/indexnow";
+import {
+  inspectUrl as gscInspectUrl,
+  monitorIssues,
+  submitBingUrls,
+  submitSitemaps,
+  syncPerformance,
+} from "../search-engines/service";
 import { auditUrl, checkRobotsAndSitemap, generateSitemap } from "../seo/audit";
 import { persistAudit } from "../seo/persist";
 import { generateArtifacts, saveArtifacts } from "../seo/artifacts";
@@ -991,6 +998,72 @@ const definitions: AgentDefinition[] = [
       const project = await loadProject(ctx);
       if (!project?.productionUrl) return skip("No production URL registered");
       if (!ctx.workspaceId) return skip("workspaceId is required");
+
+      const mode = ctx.input.mode as string | undefined;
+      if (mode === "inspect-url") {
+        const url = ctx.input.url as string | undefined;
+        if (!url) return skip("A url is required for inspection");
+        try {
+          const result = await gscInspectUrl(ctx.db, ctx.workspaceId, project.id, url);
+          return {
+            summary: `URL inspection verdict: ${result.verdict ?? "unknown"}.`,
+            data: { verdict: result.verdict, url },
+          };
+        } catch (error) {
+          return skip(error instanceof Error ? error.message : String(error));
+        }
+      }
+      if (mode === "submit-sitemaps") {
+        const approvalId = ctx.input.approvalId as string | undefined;
+        const sitemapUrl = (ctx.input.sitemapUrl as string | undefined) ?? `${new URL(project.productionUrl).origin}/sitemap.xml`;
+        if (!approvalId) {
+          const requested = await ctx.db.insert(approvals).values({
+            workspaceId: ctx.workspaceId,
+            projectId: project.id,
+            requestedByAgent: "INDEXING_AGENT",
+            actionType: "sitemap_submission",
+            description: `Submit sitemap ${sitemapUrl} to Google Search Console and Bing Webmaster`,
+            payload: { sitemapUrl } as Record<string, unknown>,
+            risk: "medium",
+          }).returning({ id: approvals.id });
+          return { summary: "Sitemap submission requires approval.", requiresApproval: true, data: { approvalId: requested[0].id } };
+        }
+        try {
+          const results = await submitSitemaps(ctx.db, ctx.workspaceId, project.id, sitemapUrl, approvalId);
+          return { summary: `Sitemap submitted to ${results.length} engine(s); acceptance is not an indexing guarantee.`, data: { results } };
+        } catch (error) {
+          return skip(error instanceof Error ? error.message : String(error));
+        }
+      }
+      if (mode === "submit-bing-urls") {
+        const approvalId = ctx.input.approvalId as string | undefined;
+        let inputUrls = (ctx.input.urls as string[] | undefined) ?? [];
+        if (!inputUrls.length) {
+          const audited = await ctx.db.select({ url: pages.url }).from(pages)
+            .where(and(eq(pages.projectId, project.id), eq(pages.statusCode, 200))).limit(100);
+          inputUrls = audited.map((r) => r.url);
+        }
+        if (!inputUrls.length) return skip("No verified URLs available for submission");
+        if (!approvalId) {
+          const requested = await ctx.db.insert(approvals).values({
+            workspaceId: ctx.workspaceId,
+            projectId: project.id,
+            requestedByAgent: "INDEXING_AGENT",
+            actionType: "url_submission",
+            description: `Submit ${inputUrls.length} URL(s) to Bing Webmaster`,
+            payload: { urls: inputUrls } as Record<string, unknown>,
+            risk: "medium",
+          }).returning({ id: approvals.id });
+          return { summary: "Bing URL submission requires approval.", requiresApproval: true, data: { approvalId: requested[0].id } };
+        }
+        try {
+          const result = await submitBingUrls(ctx.db, ctx.workspaceId, project.id, inputUrls, approvalId);
+          return { summary: `Bing accepted ${result.submitted} URL(s) within quota. ${result.note}`, data: result };
+        } catch (error) {
+          return skip(error instanceof Error ? error.message : String(error));
+        }
+      }
+
       let urls = (ctx.input.urls as string[] | undefined) ?? [];
       if (!urls.length) {
         // Derive only URLs that were actually observed by a successful audit.
@@ -1087,6 +1160,36 @@ const definitions: AgentDefinition[] = [
     async run(ctx) {
       const project = await loadProject(ctx);
       if (!project || !ctx.workspaceId) return skip("A registered project and workspace are required");
+
+      const mode = ctx.input.mode as string | undefined;
+      if (mode === "sync-both") {
+        try {
+          const results = await syncPerformance(ctx.db, ctx.workspaceId, project.id);
+          const total = results.reduce((sum, r) => sum + r.rows, 0);
+          return {
+            summary: total
+              ? `Synced ${total} performance row(s) from ${results.map((r) => r.source).join(" + ")}.`
+              : "Connected engines returned no performance rows for this site.",
+            data: { results, total },
+          };
+        } catch (error) {
+          return skip(error instanceof Error ? error.message : String(error));
+        }
+      }
+      if (mode === "monitor-issues") {
+        try {
+          const findings = await monitorIssues(ctx.db, ctx.workspaceId, project.id);
+          return {
+            summary: findings.length
+              ? `Checked indexing issues: ${findings.map((f) => `${f.source}=${f.status}`).join(", ")}.`
+              : "No search engines connected for issue monitoring.",
+            data: { findings },
+          };
+        } catch (error) {
+          return skip(error instanceof Error ? error.message : String(error));
+        }
+      }
+
       const tokens = await getDecryptedTokens(ctx.db, ctx.workspaceId, "google_search_console");
       let synced = 0;
       if (tokens) {

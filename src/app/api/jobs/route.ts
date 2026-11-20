@@ -11,7 +11,8 @@ const ALLOWED = new Set([
   "agent.run", "supervisor.daily", "discovery.sync", "seo.audit",
   "seo.artifacts.generate", "seo.site.analysis", "keywords.sync",
   "competitor.monitor", "content.strategy", "content.produce", "links.authority",
-  "developer.propose", "indexing.submit", "analytics.sync", "quality.review",
+  "developer.propose", "indexing.submit", "search.sitemap.submit", "search.url.inspect",
+  "search.bing.urls", "analytics.sync", "search.sync", "search.issues.monitor", "quality.review",
   "monitoring.uptime", "scheduler.tick", "report.generate",
 ]);
 

@@ -42,7 +42,12 @@ export function registerBuiltinHandlers(): void {
     ["links.authority", "LINK_AUTHORITY_AGENT", "Find legitimate referral candidates"],
     ["developer.propose", "DEVELOPER_AGENT", "Create approval-gated code changes"],
     ["indexing.submit", "INDEXING_AGENT", "Submit verified URLs after approval"],
+    ["search.sitemap.submit", "INDEXING_AGENT", "Submit sitemap to GSC and Bing after approval"],
+    ["search.url.inspect", "INDEXING_AGENT", "Inspect a URL via Google Search Console"],
+    ["search.bing.urls", "INDEXING_AGENT", "Submit URLs to Bing within quota after approval"],
     ["analytics.sync", "ANALYTICS_AGENT", "Sync search performance metrics"],
+    ["search.sync", "ANALYTICS_AGENT", "Sync performance from both search engines"],
+    ["search.issues.monitor", "ANALYTICS_AGENT", "Monitor sitemap and crawl issues"],
     ["quality.review", "QUALITY_SECURITY_AGENT", "Review generated content and approvals"],
   ] as const) {
     registerJobHandler({

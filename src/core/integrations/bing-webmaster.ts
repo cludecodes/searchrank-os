@@ -93,6 +93,15 @@ export class BingWebmasterClient {
     }));
   }
 
+  /** Real crawl/indexing issues reported by Bing Webmaster Tools. */
+  async getCrawlIssues(siteUrl: string): Promise<Array<Record<string, unknown>>> {
+    const data = await this.http.request<{ d?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>>({
+      path: "/webmaster/api.svc/json/GetCrawlIssues",
+      query: { siteUrl },
+    });
+    return unwrap<Array<Record<string, unknown>>>(data) ?? [];
+  }
+
   async getUrlSubmissionQuota(siteUrl: string): Promise<{ DailyQuota?: number; MonthlyQuota?: number }> {
     const data = await this.http.request<{ d?: { DailyQuota?: number; MonthlyQuota?: number } }>({
       path: "/webmaster/api.svc/json/GetUrlSubmissionQuota",

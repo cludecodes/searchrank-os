@@ -77,7 +77,9 @@ without GSC, keyword agent skipped without a data source) → visible in `/dashb
 | AI abstraction | Working | OpenAI-compatible, Anthropic, or explicit "not configured" |
 | GitHub client | Working | OAuth, public repo discovery, framework detection, branch + PR |
 | Vercel client | Working | OAuth, project discovery, production deployment info |
-| Google Search Console | Working | OAuth, sites, search analytics, sitemaps, URL inspection |
+| Google Search Console | Working | OAuth, sites, search analytics, sitemap submission, URL inspection, issue monitoring |
+| Bing Webmaster | Working | Sites, query stats, sitemap/URL submission with quota, crawl issues |
+| Edge visibility | Working | Derived from Bing data with an explicit note — no separate Edge API |
 | Bing Webmaster | Working | OAuth, sites, quota, URL batch + sitemap submission |
 | IndexNow | Working | Multi-engine submission with honest acceptance reporting |
 | Technical SEO audit | Working | Real HTTP/HTML checks, deterministic score, broken links, redirects, duplicates, orphans |
@@ -89,7 +91,7 @@ without GSC, keyword agent skipped without a data source) → visible in `/dashb
 | Agent control UI | Working | `/dashboard/agents` — run agents, preview/execute supervisor plan, review run history and approvals |
 | Keyword clusters & history | Working | Country/intent clusters with target landing page, immutable ranking snapshots and computed trends |
 | Keyword workspace | Working | `/dashboard/keywords` — research trigger, manual fallback, opportunity/priority view |
-| Indexing | Working | Sitemap generated from audited pages; per-URL submission logs; approval gate |
+| Indexing | Working | Sitemap from audited pages, dual-engine submission, per-URL logs, approval gate; `/dashboard/google`, `/dashboard/bing`, `/dashboard/indexing` |
 | Dashboard & reports | Working | All figures computed from persisted rows |
 | Audit trail | Working | Auth, project changes, approvals and agent actions logged |
 

@@ -29,6 +29,23 @@ export async function GET(_request: Request, { params }: Params) {
   }
 }
 
+export async function DELETE(_request: Request, { params }: Params) {
+  try {
+    const context = await requirePermission("project:write");
+    const { id } = await params;
+    const db = getDb();
+    const removed = await db
+      .delete(projects)
+      .where(and(eq(projects.id, id), eq(projects.workspaceId, context.workspaceId)))
+      .returning({ id: projects.id });
+    if (!removed.length) return Response.json({ error: "Project not found" }, { status: 404 });
+    await writeAuditLog("project.deleted", context, { projectId: id });
+    return Response.json({ ok: true, id });
+  } catch (error) {
+    return apiErrorResponse(error);
+  }
+}
+
 export async function PATCH(request: Request, { params }: Params) {
   try {
     const context = await requirePermission("project:write");

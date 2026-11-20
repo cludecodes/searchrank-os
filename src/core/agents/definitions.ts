@@ -1,9 +1,10 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import * as cheerio from "cheerio";
 import { z } from "zod";
 import { generateStructured } from "../ai/provider";
 import type { AgentContext, AgentDefinition, AgentKey, AgentResult } from "./framework";
 import { getAgent, registerAgent } from "./framework";
+import { executeWorkflowPlan } from "./supervisor";
 import {
   approvals,
   backlinkOpportunities,
@@ -13,7 +14,10 @@ import {
   indexingSubmissions,
   integrations,
   jobs,
+  keywordClusters,
+  keywordHistory,
   keywords,
+  pages,
   projects,
   searchMetrics,
   seoAudits,
@@ -25,7 +29,7 @@ import { VercelClient, type VercelDeployment } from "../integrations/vercel";
 import { GoogleSearchConsoleClient } from "../integrations/google-search-console";
 import { BingWebmasterClient } from "../integrations/bing-webmaster";
 import { submitToIndexNow } from "../integrations/indexnow";
-import { auditUrl } from "../seo/audit";
+import { auditUrl, checkRobotsAndSitemap, generateSitemap } from "../seo/audit";
 import { persistAudit } from "../seo/persist";
 import { enqueueJob } from "../jobs/queue";
 
@@ -104,27 +108,21 @@ const definitions: AgentDefinition[] = [
     toolsets: ["jobs", "projects", "reports"],
     canMutateProduction: false,
     async run(ctx) {
-      const list = await loadProjects(ctx);
-      const queued: string[] = [];
-      for (const project of list.filter((p) => p.status === "active")) {
-        const existing = await ctx.db
-          .select({ id: jobs.id })
-          .from(jobs)
-          .where(and(eq(jobs.projectId, project.id), eq(jobs.type, "seo.audit"), eq(jobs.status, "pending")))
-          .limit(1);
-        if (existing.length) continue;
-        const job = await enqueueJob(ctx.db, {
-          type: "seo.audit",
-          payload: { url: project.productionUrl },
-          workspaceId: project.workspaceId,
-          projectId: project.id,
-          createdBy: "CHIEF_SUPERVISOR",
-        });
-        queued.push(job.id);
-      }
+      if (!ctx.workspaceId) return skip("workspaceId is required");
+      const { plan, enqueued } = await executeWorkflowPlan(ctx.db, ctx.workspaceId, undefined, {
+        lookbackDays: Number(ctx.input.lookbackDays ?? 7),
+      });
+      const weakAgents = plan.evaluations.filter((e) => e.runs > 0 && e.successRate < 50);
       return {
-        summary: `Reviewed ${list.length} project(s); queued ${queued.length} audit job(s).`,
-        data: { projectsReviewed: list.length, queuedJobs: queued },
+        summary: `Evaluated ${plan.evaluations.length} agent(s); planned ${plan.totalPlanned} job(s) across ${plan.plans.length} project(s); enqueued ${enqueued.length}.`,
+        data: {
+          projectsReviewed: plan.plans.length,
+          queuedJobs: enqueued,
+          planned: plan.totalPlanned,
+          evaluations: plan.evaluations,
+          agentsNeedingAttention: weakAgents.map((e) => e.agentKey),
+          generatedAt: plan.generatedAt,
+        },
       };
     },
   },
@@ -369,13 +367,24 @@ const definitions: AgentDefinition[] = [
       const retrievedAt = new Date();
 
       let stored = 0;
+      const snapshots: Array<{
+        id: string;
+        country: string;
+        intent: string;
+        position: number | undefined;
+        clicks: number | undefined;
+        impressions: number | undefined;
+        ctr: number | undefined;
+      }> = [];
       for (const row of rows) {
         const term = row.keys?.[0];
         if (!term) continue;
+        const country = row.keys?.[2] ?? project.country;
+        const intent = inferIntent(term);
         const existing = await ctx.db
           .select({ id: keywords.id })
           .from(keywords)
-          .where(and(eq(keywords.projectId, project.id), eq(keywords.keyword, term), eq(keywords.country, row.keys?.[2] ?? project.country)))
+          .where(and(eq(keywords.projectId, project.id), eq(keywords.keyword, term), eq(keywords.country, country)))
           .limit(1);
         const values = {
           currentRank: row.position,
@@ -383,26 +392,94 @@ const definitions: AgentDefinition[] = [
           sourceUrl: `https://search.google.com/search-console/performance?site=${encodeURIComponent(siteUrl)}`,
           retrievedAt,
           competitorUrls: [] as string[],
+          intent,
         };
+        let keywordId: string;
         if (existing.length) {
-          await ctx.db.update(keywords).set({ ...values, updatedAt: new Date() }).where(eq(keywords.id, existing[0].id));
+          keywordId = existing[0].id;
+          await ctx.db.update(keywords).set({ ...values, updatedAt: new Date() }).where(eq(keywords.id, keywordId));
         } else {
-          await ctx.db.insert(keywords).values({
-            projectId: project.id,
-            keyword: term,
-            country: row.keys?.[2] ?? project.country,
-            language: project.language,
-            intent: inferIntent(term),
-            targetUrl: row.keys?.[1] ?? null,
-            priority: Math.round((row.clicks ?? 0) * 2 + (row.impressions ?? 0) / 100),
-            ...values,
-          });
+          const created = await ctx.db
+            .insert(keywords)
+            .values({
+              projectId: project.id,
+              keyword: term,
+              country,
+              language: project.language,
+              targetUrl: row.keys?.[1] ?? null,
+              priority: Math.round((row.clicks ?? 0) * 2 + (row.impressions ?? 0) / 100),
+              ...values,
+            })
+            .returning({ id: keywords.id });
+          keywordId = created[0].id;
         }
+        snapshots.push({
+          id: keywordId,
+          country,
+          intent,
+          position: row.position,
+          clicks: row.clicks,
+          impressions: row.impressions,
+          ctr: row.ctr,
+        });
         stored++;
       }
+
+      // Country-specific topical clusters, derived only from stored keywords.
+      const clusterGroups = new Map<string, { country: string; intent: string; ids: string[] }>();
+      for (const snapshot of snapshots) {
+        const name = `${snapshot.country}-${snapshot.intent}`;
+        const group = clusterGroups.get(name) ?? { country: snapshot.country, intent: snapshot.intent, ids: [] };
+        group.ids.push(snapshot.id);
+        clusterGroups.set(name, group);
+      }
+      let clustersCreated = 0;
+      for (const [name, group] of clusterGroups) {
+        await ctx.db
+          .insert(keywordClusters)
+          .values({
+            projectId: project.id,
+            name,
+            description: `Observed ${group.ids.length} keyword(s) for country ${group.country} with ${group.intent} intent.`,
+            createdByAgent: "KEYWORD_INTELLIGENCE_AGENT",
+          })
+          .onConflictDoNothing();
+        const [cluster] = await ctx.db
+          .select({ id: keywordClusters.id })
+          .from(keywordClusters)
+          .where(and(eq(keywordClusters.projectId, project.id), eq(keywordClusters.name, name)))
+          .limit(1);
+        if (cluster) {
+          for (const id of group.ids) {
+            await ctx.db.update(keywords).set({ clusterId: cluster.id }).where(eq(keywords.id, id));
+          }
+          clustersCreated++;
+        }
+      }
+
+      // Immutable ranking snapshot; never overwrite prior history.
+      for (const snapshot of snapshots) {
+        await ctx.db.insert(keywordHistory).values({
+          keywordId: snapshot.id,
+          rank: snapshot.position,
+          clicks: snapshot.clicks,
+          impressions: snapshot.impressions,
+          ctr: snapshot.ctr,
+          source: "google_search_console",
+          recordedAt: retrievedAt,
+        });
+      }
+
       return {
-        summary: `Stored ${stored} keyword record(s) from Google Search Console.`,
-        data: { stored, source: "google_search_console", startDate, endDate },
+        summary: `Stored ${stored} keyword record(s) from Google Search Console across ${clustersCreated} country/intent cluster(s).`,
+        data: {
+          stored,
+          clustersCreated,
+          historySnapshots: snapshots.length,
+          source: "google_search_console",
+          startDate,
+          endDate,
+        },
       };
     },
   },
@@ -419,6 +496,7 @@ const definitions: AgentDefinition[] = [
       const list = await ctx.db.select().from(competitors).where(eq(competitors.projectId, project.id));
       if (!list.length) return skip("No competitors registered for this project");
       let analyzed = 0;
+      let gapsFound = 0;
       for (const competitor of list) {
         const site = competitor.domain.startsWith("http") ? competitor.domain : `https://${competitor.domain}`;
         const response = await fetch(site, {
@@ -429,17 +507,43 @@ const definitions: AgentDefinition[] = [
         const html = await response.text();
         const $ = cheerio.load(html);
         const titles = $("h1, h2, h3").map((_, el) => $(el).text().trim()).get().filter(Boolean).slice(0, 30);
+
+        // Content gaps: competitor headings whose distinctive terms are absent
+        // from our own stored keywords and page titles. No invented topics.
+        const ownKeywords = await ctx.db
+          .select({ value: keywords.keyword })
+          .from(keywords)
+          .where(eq(keywords.projectId, project.id));
+        const ownPages = await ctx.db
+          .select({ value: pages.title })
+          .from(pages)
+          .where(eq(pages.projectId, project.id));
+        const covered = [...ownKeywords, ...ownPages]
+          .map((entry) => entry.value ?? "")
+          .join(" ")
+          .toLowerCase();
+        const gaps = titles.filter((heading) => {
+          const terms = heading.toLowerCase().split(/\W+/).filter((word) => word.length > 4);
+          return terms.length > 0 && !terms.some((term) => covered.includes(term));
+        });
+
         await ctx.db
           .update(competitors)
           .set({
             strengths: titles,
+            weaknesses: gaps,
+            contentGaps: gaps,
             lastAnalyzedAt: new Date(),
-            notes: `Observed ${titles.length} headings on ${response.url} at ${new Date().toISOString()}.`,
+            notes: `Observed ${titles.length} headings on ${response.url}; ${gaps.length} topic gap(s) versus our stored keywords/pages.`,
           })
           .where(eq(competitors.id, competitor.id));
         analyzed++;
+        gapsFound += gaps.length;
       }
-      return { summary: `Analyzed ${analyzed} competitor site(s) from live HTML.`, data: { analyzed } };
+      return {
+        summary: `Analyzed ${analyzed} competitor site(s) from live HTML; found ${gapsFound} topic gap(s).`,
+        data: { analyzed, gapsFound },
+      };
     },
   },
   {
@@ -685,8 +789,29 @@ const definitions: AgentDefinition[] = [
       const project = await loadProject(ctx);
       if (!project?.productionUrl) return skip("No production URL registered");
       if (!ctx.workspaceId) return skip("workspaceId is required");
-      const urls = (ctx.input.urls as string[] | undefined) ?? [];
-      if (!urls.length) return skip("No verified URLs supplied for submission");
+      let urls = (ctx.input.urls as string[] | undefined) ?? [];
+      if (!urls.length) {
+        // Derive only URLs that were actually observed by a successful audit.
+        const audited = await ctx.db
+          .select({ url: pages.url })
+          .from(pages)
+          .where(and(eq(pages.projectId, project.id), eq(pages.statusCode, 200)))
+          .limit(500);
+        urls = audited.map((row) => row.url);
+      }
+      if (!urls.length) return skip("No verified URLs available — run a technical audit first");
+
+      // Build a sitemap from the verified URL set and check robots.txt discovery.
+      const sitemapXml = generateSitemap(urls);
+      const origin = new URL(project.productionUrl).origin;
+      const discovery = await checkRobotsAndSitemap(origin).catch(() => ({
+        robotsFound: false,
+        robotsDisallowsAll: false,
+        sitemapDeclared: [] as string[],
+        sitemapReachable: null as boolean | null,
+        sitemapUrlCount: null as number | null,
+      }));
+
       const approvalId = ctx.input.approvalId as string | undefined;
       if (!approvalId) {
         const requested = await ctx.db
@@ -696,8 +821,13 @@ const definitions: AgentDefinition[] = [
             projectId: project.id,
             requestedByAgent: "INDEXING_AGENT",
             actionType: "indexing_submission",
-            description: `Submit ${urls.length} URL(s) to IndexNow and connected search engines`,
-            payload: { urls } as Record<string, unknown>,
+            description: `Submit ${urls.length} verified URL(s) to IndexNow and connected search engines`,
+            payload: {
+              urls,
+              sitemapGenerated: true,
+              sitemapUrlCount: discovery.sitemapUrlCount,
+              robotsFound: discovery.robotsFound,
+            } as Record<string, unknown>,
             risk: "medium",
           })
           .returning({ id: approvals.id });
@@ -717,20 +847,28 @@ const definitions: AgentDefinition[] = [
       if (!key || !keyLocation || !host) return skip("IndexNow key/keyLocation not configured");
 
       const results = await submitToIndexNow({ host, key, keyLocation, urlList: urls }, ["bing"]);
+      let logged = 0;
       for (const result of results) {
-        await ctx.db.insert(indexingSubmissions).values({
-          projectId: project.id,
-          engine: `indexnow-${result.engine}`,
-          url: urls[0],
-          status: result.accepted ? "accepted" : "rejected",
-          httpStatus: result.httpStatus,
-          responseBody: result.body.slice(0, 2000),
-          submittedBy: "INDEXING_AGENT",
-        });
+        for (const url of urls) {
+          await ctx.db.insert(indexingSubmissions).values({
+            projectId: project.id,
+            engine: `indexnow-${result.engine}`,
+            url,
+            status: result.accepted ? "accepted" : "rejected",
+            httpStatus: result.httpStatus,
+            responseBody: result.body.slice(0, 2000),
+            submittedBy: "INDEXING_AGENT",
+          });
+          logged++;
+        }
       }
       return {
-        summary: `IndexNow accepted ${results.filter((r) => r.accepted).length}/${results.length} request(s). Acceptance is not an indexing guarantee.`,
-        data: { results: results.map(({ engine, httpStatus, accepted }) => ({ engine, httpStatus, accepted })) },
+        summary: `IndexNow accepted ${results.filter((r) => r.accepted).length}/${results.length} request(s) covering ${logged} URL(s). Acceptance is not an indexing guarantee.`,
+        data: {
+          results: results.map(({ engine, httpStatus, accepted }) => ({ engine, httpStatus, accepted })),
+          urlsSubmitted: logged,
+          sitemapUrlCount: discovery.sitemapUrlCount,
+        },
       };
     },
   },
@@ -776,18 +914,53 @@ const definitions: AgentDefinition[] = [
           }
         }
       }
-      const [totals] = await ctx.db
-        .select({
-          clicks: sql<number>`coalesce(sum(${searchMetrics.clicks}), 0)::int`,
-          impressions: sql<number>`coalesce(sum(${searchMetrics.impressions}), 0)::int`,
-        })
-        .from(searchMetrics)
-        .where(eq(searchMetrics.projectId, project.id));
+      const dateString = (daysAgo: number) =>
+        new Date(Date.now() - daysAgo * 86_400_000).toISOString().slice(0, 10);
+      const rangeTotals = async (from: string, to: string) => {
+        const [row] = await ctx.db
+          .select({
+            clicks: sql<number>`coalesce(sum(${searchMetrics.clicks}), 0)::int`,
+            impressions: sql<number>`coalesce(sum(${searchMetrics.impressions}), 0)::int`,
+          })
+          .from(searchMetrics)
+          .where(
+            and(
+              eq(searchMetrics.projectId, project.id),
+              gte(searchMetrics.date, from),
+              lte(searchMetrics.date, to),
+            ),
+          );
+        return { clicks: Number(row?.clicks ?? 0), impressions: Number(row?.impressions ?? 0) };
+      };
+      const pct = (current: number, previous: number) =>
+        previous === 0 ? null : Math.round(((current - previous) / previous) * 100);
+
+      const currentWeek = await rangeTotals(dateString(6), dateString(0));
+      const previousWeek = await rangeTotals(dateString(13), dateString(7));
+      const currentMonth = await rangeTotals(dateString(29), dateString(0));
+      const previousMonth = await rangeTotals(dateString(59), dateString(30));
+
       return {
         summary: tokens
-          ? `Synced ${synced} GSC row(s). Portfolio clicks: ${totals?.clicks ?? 0}.`
+          ? `Synced ${synced} GSC row(s). Weekly clicks ${currentWeek.clicks} vs ${previousWeek.clicks} prior.`
           : "Google Search Console is not connected; reporting only over already-persisted data.",
-        data: { synced, clicks: totals?.clicks ?? 0, impressions: totals?.impressions ?? 0 },
+        data: {
+          synced,
+          weekly: {
+            clicks: currentWeek.clicks,
+            previousClicks: previousWeek.clicks,
+            clicksChangePct: pct(currentWeek.clicks, previousWeek.clicks),
+            impressions: currentWeek.impressions,
+            previousImpressions: previousWeek.impressions,
+          },
+          monthly: {
+            clicks: currentMonth.clicks,
+            previousClicks: previousMonth.clicks,
+            clicksChangePct: pct(currentMonth.clicks, previousMonth.clicks),
+            impressions: currentMonth.impressions,
+            previousImpressions: previousMonth.impressions,
+          },
+        },
       };
     },
   },
@@ -819,9 +992,31 @@ const definitions: AgentDefinition[] = [
       const pendingApprovals = ctx.workspaceId
         ? await ctx.db.select().from(approvals).where(and(eq(approvals.workspaceId, ctx.workspaceId), eq(approvals.status, "pending")))
         : [];
+
+      // Inspect proposed code changes for dangerous modifications before any merge.
+      const dangerousRules: Array<{ pattern: RegExp; reason: string }> = [
+        { pattern: /(^|\/)\.env(\.|$)/i, reason: "Proposed change touches an environment/secrets file" },
+        { pattern: /(^|\/)(secrets?|credentials?)\//i, reason: "Proposed change touches a secrets directory" },
+        { pattern: /private[_-]?key|id_rsa|\.pem$|BEGIN .*PRIVATE KEY/i, reason: "Proposed change contains key material" },
+        { pattern: /(^|\/)node_modules\//i, reason: "Proposed change touches dependency artifacts" },
+        { pattern: /child_process|execSync|spawnSync|\brm\s+-rf\b|process\.env\.[A-Z_]+/i, reason: "Proposed change contains command execution or secret access" },
+      ];
+      const dangerousChanges: Array<{ approvalId: string; path: string; reason: string }> = [];
+      for (const approval of pendingApprovals.filter((a) => a.actionType === "code_change")) {
+        const changes = (approval.payload as { changes?: Array<{ path: string; content: string }> })?.changes ?? [];
+        for (const change of changes) {
+          const hit = dangerousRules.find((rule) => rule.pattern.test(change.path) || rule.pattern.test(change.content ?? ""));
+          if (hit) dangerousChanges.push({ approvalId: approval.id, path: change.path, reason: hit.reason });
+        }
+      }
+
       return {
-        summary: `Reviewed ${candidates.length} content item(s) and ${pendingApprovals.length} pending approval(s); ${flagged.length} flagged.`,
-        data: { flagged, pendingApprovals: pendingApprovals.map((a) => ({ id: a.id, actionType: a.actionType, risk: a.risk })) },
+        summary: `Reviewed ${candidates.length} content item(s) and ${pendingApprovals.length} pending approval(s); ${flagged.length} content flag(s), ${dangerousChanges.length} dangerous change(s).`,
+        data: {
+          flagged,
+          dangerousChanges,
+          pendingApprovals: pendingApprovals.map((a) => ({ id: a.id, actionType: a.actionType, risk: a.risk })),
+        },
       };
     },
   },

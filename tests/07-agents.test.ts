@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { agentRuns, approvals, contentItems, keywords, projects, type Project } from "../src/core/db/schema";
+import { agentRuns, approvals, contentItems, jobs, keywords, projects, type Project } from "../src/core/db/schema";
 import { registerAllAgents } from "../src/core/agents/definitions";
 import { getAgent, listAgents, runAgent } from "../src/core/agents/framework";
 import { enqueueJob } from "../src/core/jobs/queue";
@@ -57,7 +57,9 @@ describe("AI agent workforce", () => {
       { workspaceId, name: "Idle", slug: "idle", productionUrl: "https://idle.example", status: "discovered" },
     ]);
     const { result, runId } = await runAgent(db, "CHIEF_SUPERVISOR", { workspaceId, input: {} });
-    expect(result.summary).toMatch(/queued 1 audit job/);
+    expect(result.summary).toMatch(/planned \d+ job/);
+    const enqueued = await db.select().from(jobs).where(eq(jobs.workspaceId, workspaceId));
+    expect(enqueued.some((j) => j.type === "seo.audit")).toBe(true);
     const run = await db.select().from(agentRuns).where(eq(agentRuns.id, runId));
     expect(run[0].status).toBe("succeeded");
     const queued = await enqueueJob(db, { workspaceId, type: "noop" });

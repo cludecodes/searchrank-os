@@ -80,8 +80,22 @@ schedules, rate limits.
 - [x] Discovery dashboard page (`/dashboard/discovery`)
 - [x] Tests: 4 discovery engine tests, all passing
 
-### Phase 3 — Multi-agent workforce
-Wire each agent to real tools, approval gates, supervisor job graph, run history.
+### Phase 3 — Multi-agent workforce (completed & verified)
+- [x] Supervisor workflow engine: evidence-driven plans, priority assignment,
+      duplicate-job prevention, result evaluation, persisted audit events
+- [x] CHIEF_SUPERVISOR wired to plan + evaluation + job enqueue
+- [x] Keyword agent: country/intent clusters + immutable ranking history
+- [x] Competitor agent: content gaps derived from live headings vs stored data
+- [x] Indexing agent: sitemap from verified pages, robots discovery, per-URL
+      submission logging, approval gate retained
+- [x] Analytics agent: real weekly/monthly comparison from persisted metrics
+- [x] Quality agent: dangerous code-change detection in approval payloads
+- [x] Agent control UI (`/dashboard/agents`): run buttons, plan preview/execute,
+      run history, approval queue with decisions
+- [x] APIs: `/api/agents` (runs, approvals, evaluations), `/api/supervisor/plan`
+- [x] Tests: 10 new Phase 3 tests (51 total), all passing
+- [x] End-to-end: supervisor plan → 3 jobs → worker → 3 persisted agent runs
+      (audit score 72, honest skip for disconnected sources)
 
 ### Phase 4 — Technical SEO automation
 Real audit execution, sitemap/robots generation, structured-data validation,

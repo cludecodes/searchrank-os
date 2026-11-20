@@ -60,6 +60,10 @@ An end-to-end smoke test was also performed against a clean local database: admi
 manual project registration → audit job enqueue → `pnpm worker:once` → audit score 69 persisted
 → real score visible in `/dashboard` and `/dashboard/audits`.
 
+Phase 3 was verified end-to-end against Neon: supervisor plan → 3 jobs enqueued →
+`pnpm worker:once` → 3 persisted agent runs (audit score 72, analytics reported honestly
+without GSC, keyword agent skipped without a data source) → visible in `/dashboard/agents`.
+
 ## What works today
 
 | Capability | Status | Notes |
@@ -79,7 +83,10 @@ manual project registration → audit job enqueue → `pnpm worker:once` → aud
 | Technical SEO audit | Working | Real HTTP/HTML checks, deterministic score, broken-link checks |
 | Keyword store | Working | Source + retrieval date + history; no invented volumes |
 | Content workflow | Working | Brief → draft → review → approval → publish |
-| 12 agents | Working | Each persists an agent run; high-risk actions require approval |
+| 12 agents | Working | Persisted run history; supervisor workflow graph evaluates runs and enqueues evidence-driven jobs; high-risk actions require approval |
+| Agent control UI | Working | `/dashboard/agents` — run agents, preview/execute supervisor plan, review run history and approvals |
+| Keyword clusters & history | Working | Country/intent clusters and immutable ranking snapshots from real GSC data |
+| Indexing | Working | Sitemap generated from audited pages; per-URL submission logs; approval gate |
 | Dashboard & reports | Working | All figures computed from persisted rows |
 | Audit trail | Working | Auth, project changes, approvals and agent actions logged |
 

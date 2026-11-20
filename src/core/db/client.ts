@@ -56,7 +56,7 @@ export function getDb(): Database {
     cachedMode = "neon";
   } else {
     const dataDir = process.env.PGLITE_DATA_DIR || "./.data/pglite";
-    mkdirSync(path.resolve(dataDir), { recursive: true });
+    mkdirSync(path.resolve(/* turbopackIgnore: true */ dataDir), { recursive: true });
     cachedClient = new PGlite(dataDir);
     cachedDb = drizzlePglite(cachedClient, { schema });
     cachedMode = "pglite";

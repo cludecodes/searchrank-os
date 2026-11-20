@@ -83,7 +83,8 @@ without GSC, keyword agent skipped without a data source) → visible in `/dashb
 | Technical SEO audit | Working | Real HTTP/HTML checks, deterministic score, broken links, redirects, duplicates, orphans |
 | SEO artifacts | Working | Framework-aware sitemap/robots/JSON-LD/metadata proposals from verified rows; approval required before applying |
 | Keyword store | Working | Source + retrieval date + history; GSC + Bing query data; value-based priority; no invented volumes/difficulty |
-| Content workflow | Working | Brief → draft → review → approval → publish |
+| Content workflow | Working | Evidence-based briefs without AI; state machine with review/approval gates, quality checks and audit log |
+| Content Studio | Working | `/dashboard/content` — pipeline stats, evidence detail, editorial transitions |
 | 12 agents | Working | Persisted run history; supervisor workflow graph evaluates runs and enqueues evidence-driven jobs; high-risk actions require approval |
 | Agent control UI | Working | `/dashboard/agents` — run agents, preview/execute supervisor plan, review run history and approvals |
 | Keyword clusters & history | Working | Country/intent clusters with target landing page, immutable ranking snapshots and computed trends |
@@ -100,7 +101,11 @@ The platform is fully functional locally without external accounts, but live dat
 - `MASTER_ENCRYPTION_KEY` (base64 32 bytes) in production
 - OAuth apps: GitHub, Vercel, Google Search Console, Bing Webmaster
 - `INDEXNOW_KEY` + `INDEXNOW_KEY_LOCATION`
-- `AI_PROVIDER` / `AI_API_KEY` / `AI_MODEL` for content and strategy agents
+- `AI_PROVIDER` / `AI_API_KEY` / `AI_MODEL` for article drafting (briefs and editorial workflow work without it)
+- IndexNow is configured and its key file is hosted at
+  `https://searchrank-os.vercel.app/4235824ef8038304f94a5590722617b3.txt`. For client
+  domains, set `indexNowKey`/`indexNowKeyLocation` in the project's SEO config — the
+  protocol requires the key file on the host being submitted.
 - `CRON_SECRET` if using Vercel Cron
 
 See `.env.example`. Never commit `.env.local`.

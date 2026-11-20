@@ -78,7 +78,7 @@ describe("AI agent workforce", () => {
       ai: mockAI,
       input: {},
     });
-    expect(result.summary).toMatch(/Created 1 content brief/);
+    expect(result.summary).toMatch(/Created 1 evidence-based brief/);
     const items = await db.select().from(contentItems).where(eq(contentItems.projectId, project.id));
     expect(items[0].targetKeywordId).toBe(keyword.id);
     expect(items[0].status).toBe("brief");

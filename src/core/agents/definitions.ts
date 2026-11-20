@@ -31,6 +31,7 @@ import {
   commercialRelevance,
   detectOpportunities,
 } from "../keywords/intelligence";
+import { buildBriefFromEvidence, checkContentQuality } from "../content/workflow";
 import { getDecryptedTokens } from "../integrations/credentials";
 import { GitHubClient } from "../integrations/github";
 import { VercelClient, type VercelDeployment } from "../integrations/vercel";
@@ -700,66 +701,95 @@ const definitions: AgentDefinition[] = [
     async run(ctx) {
       const project = await loadProject(ctx);
       if (!project) return skip("A registered project is required");
-      const existing = await ctx.db.select({ id: keywords.id }).from(keywords).where(eq(keywords.projectId, project.id)).limit(1);
-      if (!existing.length) return skip("No keyword records available — run Keyword Intelligence first");
-      if (ctx.ai.name === "none") return skip("No AI provider configured — brief generation would fabricate content");
-
-      const top = await ctx.db
+      const ranked = await ctx.db
         .select()
         .from(keywords)
         .where(eq(keywords.projectId, project.id))
         .orderBy(sql`${keywords.priority} DESC`)
         .limit(10);
-      const briefSchema = z.object({
-        briefs: z.array(
-          z.object({
-            keywordId: z.string(),
-            title: z.string().min(5),
-            proposedUrl: z.string().min(1),
-            audience: z.string().min(5),
-            uniqueValueProposition: z.string().min(10),
-            outline: z.array(z.string()),
-            internalLinks: z.array(z.string()),
-          }),
-        ),
-      });
-      const { data } = await generateStructured(ctx.ai, briefSchema, {
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a SEO content strategist. Produce briefs only for the supplied keywords. " +
-              "Do not invent statistics, ratings, testimonials, or business facts. Suggested URLs must be relative paths.",
-          },
-          {
-            role: "user",
-            content: JSON.stringify({
-              project: { name: project.name, domain: project.domain, description: project.description, category: project.businessCategory },
-              keywords: top.map((k) => ({ id: k.id, keyword: k.keyword, intent: k.intent, clicks: 0, position: k.currentRank })),
-            }),
-          },
-        ],
-      });
+      if (!ranked.length) return skip("No keyword records available — run Keyword Intelligence first");
+
+      const clusterRows = await ctx.db.select().from(keywordClusters).where(eq(keywordClusters.projectId, project.id));
+      const competitorRows = await ctx.db.select().from(competitors).where(eq(competitors.projectId, project.id));
+      const pageRows = await ctx.db.select().from(pages).where(eq(pages.projectId, project.id));
+
+      // Unanswered customer questions come only from real stored queries.
+      const questionQueries = ranked
+        .map((k) => k.keyword)
+        .filter((term) => /^(how|what|why|when|where|which|best|can|does|is|are)\b/i.test(term));
 
       let created = 0;
-      for (const item of data.briefs) {
-        if (!top.some((k) => k.id === item.keywordId)) continue;
+      let reused = 0;
+      for (const keyword of ranked.slice(0, 5)) {
+        const existing = await ctx.db
+          .select({ id: contentItems.id })
+          .from(contentItems)
+          .where(and(eq(contentItems.projectId, project.id), eq(contentItems.targetKeywordId, keyword.id)))
+          .limit(1);
+        if (existing.length) { reused++; continue; }
+
+        const cluster = clusterRows.find((c) => c.id === keyword.clusterId) ?? null;
+        const brief = buildBriefFromEvidence({
+          project,
+          keyword,
+          cluster,
+          competitors: competitorRows.map((c) => ({ domain: c.domain, contentGaps: c.contentGaps, strengths: c.strengths })),
+          pages: pageRows.map((p) => ({ url: p.url, title: p.title })),
+          questionQueries,
+        });
+
+        // AI is an optional refinement; the evidence-based brief never depends on it.
+        let finalBrief = brief;
+        if (ctx.ai.name !== "none") {
+          try {
+            const refinement = z.object({
+              audience: z.string().min(5),
+              uniqueValueProposition: z.string().min(10),
+              outline: z.array(z.string()),
+            });
+            const { data } = await generateStructured(ctx.ai, refinement, {
+              messages: [
+                {
+                  role: "system",
+                  content: "Refine the brief using only supplied evidence. Never invent statistics, ratings, testimonials or business facts.",
+                },
+                { role: "user", content: JSON.stringify(brief) },
+              ],
+            });
+            finalBrief = {
+              ...brief,
+              audience: data.audience,
+              uniqueValueProposition: data.uniqueValueProposition,
+              brief: { ...(brief.brief as Record<string, unknown>), outline: data.outline } as Record<string, unknown>,
+            };
+          } catch {
+            // Keep the deterministic brief when the provider fails.
+          }
+        }
+
         await ctx.db.insert(contentItems).values({
           projectId: project.id,
-          targetKeywordId: item.keywordId,
-          title: item.title,
-          proposedUrl: item.proposedUrl,
-          intent: inferIntent(item.title),
-          audience: item.audience,
-          uniqueValueProposition: item.uniqueValueProposition,
-          brief: { outline: item.outline } as Record<string, unknown>,
-          internalLinkPlan: item.internalLinks,
+          clusterId: keyword.clusterId ?? null,
+          targetKeywordId: keyword.id,
+          title: finalBrief.title,
+          proposedUrl: finalBrief.proposedUrl,
+          intent: finalBrief.intent,
+          audience: finalBrief.audience,
+          uniqueValueProposition: finalBrief.uniqueValueProposition,
+          brief: finalBrief.brief,
+          supportingResearch: finalBrief.supportingResearch,
+          internalLinkPlan: finalBrief.internalLinkPlan,
+          metaTitle: finalBrief.metaTitle,
+          metaDescription: finalBrief.metaDescription,
           status: "brief",
           createdByAgent: "CONTENT_STRATEGY_AGENT",
         });
         created++;
       }
-      return { summary: `Created ${created} content brief(s) from ${top.length} stored keywords.`, data: { created } };
+      return {
+        summary: `Created ${created} evidence-based brief(s) from ${ranked.length} stored keyword(s); ${reused} already existed.`,
+        data: { created, reused, questions: questionQueries.length },
+      };
     },
   },
   {
@@ -781,6 +811,7 @@ const definitions: AgentDefinition[] = [
       const targets = candidates.filter((c) => !c.body);
       if (!targets.length) return skip("No approved content briefs awaiting production");
       let drafted = 0;
+      let rejected = 0;
       for (const item of targets) {
         const completion = await ctx.ai.complete({
           messages: [
@@ -794,19 +825,46 @@ const definitions: AgentDefinition[] = [
           ],
           maxTokens: 3000,
         });
-        const similarity = await duplicateRisk(ctx, completion.text, project.id);
+        const existingBodies = await ctx.db
+          .select({ body: contentItems.body })
+          .from(contentItems)
+          .where(eq(contentItems.projectId, project.id));
+        const [targetKeyword] = item.targetKeywordId
+          ? await ctx.db.select({ keyword: keywords.keyword }).from(keywords).where(eq(keywords.id, item.targetKeywordId)).limit(1)
+          : [];
+        const quality = checkContentQuality(
+          completion.text,
+          existingBodies.map((row) => row.body ?? "").filter(Boolean),
+          targetKeyword?.keyword ?? null,
+        );
+        if (!quality.passed && quality.fabricatedClaims.length) {
+          await ctx.db
+            .update(contentItems)
+            .set({
+              status: "rejected",
+              brief: { ...(item.brief as Record<string, unknown>), qualityRejection: quality } as Record<string, unknown>,
+              updatedAt: new Date(),
+            })
+            .where(eq(contentItems.id, item.id));
+          rejected++;
+          continue;
+        }
         await ctx.db
           .update(contentItems)
           .set({
             body: completion.text,
-            originalityScore: similarity,
+            originalityScore: quality.duplicateRisk,
+            brief: { ...(item.brief as Record<string, unknown>), quality } as Record<string, unknown>,
             status: "draft",
             updatedAt: new Date(),
           })
           .where(eq(contentItems.id, item.id));
         drafted++;
       }
-      return { summary: `Drafted ${drafted} content item(s); all require human review.`, data: { drafted } };
+      return {
+        summary: `Drafted ${drafted} content item(s); ${rejected} rejected for fabricated claims. All drafts require human review.`,
+        data: { drafted, rejected },
+      };
     },
   },
   {
@@ -985,8 +1043,11 @@ const definitions: AgentDefinition[] = [
       if (!approval || approval.status !== "approved" || approval.actionType !== "indexing_submission") {
         return skip("Approval was not granted for these URLs");
       }
-      const key = process.env.INDEXNOW_KEY;
-      const keyLocation = process.env.INDEXNOW_KEY_LOCATION;
+      const seoConfig = project.seoConfig as { indexNowKey?: string; indexNowKeyLocation?: string };
+      const key = seoConfig.indexNowKey ?? process.env.INDEXNOW_KEY;
+      // IndexNow requires the key file to be hosted on the submitted host;
+      // a per-project location overrides the platform default.
+      const keyLocation = seoConfig.indexNowKeyLocation ?? process.env.INDEXNOW_KEY_LOCATION;
       const host = domainOf(project.productionUrl);
       if (!key || !keyLocation || !host) return skip("IndexNow key/keyLocation not configured");
 

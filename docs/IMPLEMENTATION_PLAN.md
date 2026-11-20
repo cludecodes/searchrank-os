@@ -132,9 +132,25 @@ schedules, rate limits.
 - [x] End-to-end: manual keyword persisted with source=manual/null volume;
       research job executed and honestly skipped with no connected sources
 
-### Phase 6 — Content production
-Briefs → drafts → review → approval → publish workflow, originality checks,
-internal-link planning, per-item approval status.
+### Phase 6 — Content production (completed & verified)
+- [x] Editorial state machine: idea → brief → draft → in_review → approved →
+      published, with rejection/revert and admin-only approve/publish
+- [x] Required-field validation before review/approval/publish (intent, cluster,
+      audience, UVP, research, internal links, URL, metadata, body)
+- [x] Evidence-based brief builder from stored keywords/clusters/competitor gaps/
+      pages/question queries — works with no AI provider and invents no facts
+- [x] Content Strategy Agent now generates deterministic briefs; AI is optional refinement
+- [x] Content Production Agent runs quality checks (fabricated claims, keyword
+      stuffing, thin content, duplicate risk) and rejects unsafe drafts
+- [x] APIs: `/api/content` (list/create), `/api/content/[id]` (edit),
+      `/api/content/[id]/transition`, `/api/content/generate`
+- [x] `/dashboard/content` Content Studio with pipeline stats, evidence detail
+      and transition actions
+- [x] IndexNow key configured and hosted at a real key-location URL; per-project
+      key-location override added for client domains
+- [x] Tests: 6 new Phase 6 tests (72 total), all passing
+- [x] End-to-end: brief job → worker → evidence-based brief → full transition
+      chain to published; invalid jumps blocked with 409
 
 ### Phase 7 — Search engine integration
 GSC/Bing OAuth + performance sync + sitemap submission; IndexNow notifications.

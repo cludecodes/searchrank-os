@@ -1,0 +1,12 @@
+node_modules
+.next
+.data
+.env
+.env.local
+.env.*.local
+*.log
+coverage
+dist
+.turbo
+.DS_Store
+drizzle/meta/_journal.json.bak

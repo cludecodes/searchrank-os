@@ -1,0 +1,37 @@
+services:
+  migrate:
+    build: .
+    command: ["pnpm", "db:migrate"]
+    env_file:
+      - .env
+    volumes:
+      - searchrank-data:/app/.data
+    restart: "no"
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      - searchrank-data:/app/.data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: ["pnpm", "worker"]
+    env_file:
+      - .env
+    volumes:
+      - searchrank-data:/app/.data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  searchrank-data:

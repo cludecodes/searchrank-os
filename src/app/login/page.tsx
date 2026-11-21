@@ -1,15 +1,28 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function LoginPage() {
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  google_access_denied: "Google sign-in was cancelled, or your account is not an approved test user on the OAuth consent screen. Approve access in Google Cloud Console → OAuth consent screen → Test users.",
+  google_invalid_state: "The Google sign-in session expired. Please click Connect Google again.",
+  google_profile_failed: "Google did not return a valid profile. Please try again.",
+  google_email_not_verified: "Please verify your Google account email and try again.",
+  no_workspace: "Your account has no workspace. Contact an administrator.",
+  auth_required: "Please sign in to the platform first, then connect Google.",
+};
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryError = searchParams.get("error");
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(() =>
+    queryError ? (OAUTH_ERROR_MESSAGES[queryError] ?? `Sign-in error: ${queryError}`) : "",
+  );
   const [busy, setBusy] = useState(false);
 
   async function submit(event: React.FormEvent) {
@@ -102,5 +115,13 @@ export default function LoginPage() {
         </form>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<main className="flex min-h-screen items-center justify-center text-sm text-slate-400">Loading…</main>}>
+      <LoginForm />
+    </Suspense>
   );
 }

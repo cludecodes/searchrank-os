@@ -121,15 +121,20 @@ export function SearchEnginePanel({ focus }: { focus: "google" | "bing" | "index
           </ul>
         )}
         {!engine?.connected && focus === "google" && (
-          <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-[11px] text-amber-200/90">
-            <p className="font-semibold">Google setup required</p>
+          <div className="mt-3 rounded-lg border border-brand-500/30 bg-brand-500/5 p-3 text-[11px] text-slate-300">
+            <p className="font-semibold text-brand-300">Ready to connect</p>
             <p className="mt-1">
-              In Google Cloud Console → APIs &amp; Services → Credentials → OAuth client, add this exact authorized redirect URI:
+              Your OAuth client already has the correct redirect URI registered. Click <strong>Connect Google</strong>,
+              sign in with the Google account that manages your Search Console properties, and approve the
+              Search Console scopes. The connection is saved encrypted automatically.
             </p>
-            <code className="mt-1 block break-all rounded bg-ink-950/70 p-2 text-brand-300">
-              https://searchrank-os.vercel.app/api/integrations/google_search_console/callback
-            </code>
-            <p className="mt-1">Then click “Connect Google”. Google rejects sign-in until this URI is registered (redirect_uri_mismatch).</p>
+            <p className="mt-1 text-slate-500">
+              Registered redirect URI: <code className="text-brand-300">https://searchrank-os.vercel.app/api/auth/google/callback</code>
+            </p>
+            <p className="mt-1 text-slate-500">
+              If Google ever reports <code>redirect_uri_mismatch</code> or <code>access_denied</code>, confirm the URI above is
+              on the OAuth client and that your Google account is an approved test user on the consent screen.
+            </p>
           </div>
         )}
         {focus === "indexing" && data?.edge && (

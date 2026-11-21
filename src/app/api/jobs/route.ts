@@ -13,7 +13,7 @@ const ALLOWED = new Set([
   "competitor.monitor", "content.strategy", "content.produce", "links.authority",
   "developer.propose", "indexing.submit", "search.sitemap.submit", "search.url.inspect",
   "search.bing.urls", "analytics.sync", "search.sync", "search.issues.monitor", "quality.review",
-  "pipeline.advance", "pipeline.rollback",
+  "pipeline.advance", "pipeline.rollback", "growth.plan.build", "report.executive",
   "monitoring.uptime", "scheduler.tick", "report.generate",
 ]);
 

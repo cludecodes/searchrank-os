@@ -95,6 +95,9 @@ without GSC, keyword agent skipped without a data source) → visible in `/dashb
 | Indexing | Working | Sitemap from audited pages, dual-engine submission, per-URL logs, approval gate; `/dashboard/google`, `/dashboard/bing`, `/dashboard/indexing` |
 | Dashboard & reports | Working | All figures computed from persisted rows |
 | Audit trail | Working | Auth, project changes, approvals and agent actions logged |
+| Growth engine | Working | Evidence-based opportunity map and measured leads/revenue; `/dashboard/growth` |
+| Executive reports | Working | Work/issues/rankings/traffic/conversions and next actions; `/dashboard/reports` |
+| Security audit | Working | Backup manifest and live posture checks via `/api/security/audit` |
 
 ## What requires operator credentials
 

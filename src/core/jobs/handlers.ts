@@ -75,6 +75,32 @@ export function registerBuiltinHandlers(): void {
   }
 
   registerJobHandler({
+    type: "report.executive",
+    description: "Generate an executive report from persisted data",
+    async run(ctx) {
+      const { generateAndStoreReport } = await import("../reporting/executive-reports");
+      if (!ctx.job.workspaceId) throw new Error("workspaceId required");
+      const result = await generateAndStoreReport(ctx.db, ctx.job.workspaceId, {
+        days: Number(ctx.input.days ?? 7),
+        type: "executive",
+      });
+      return { reportId: result.id, periodStart: result.report.periodStart };
+    },
+  });
+
+  registerJobHandler({
+    type: "growth.plan.build",
+    description: "Derive growth opportunities from persisted evidence",
+    async run(ctx) {
+      const { buildGrowthPlan } = await import("../growth/engine");
+      const projectId = ctx.job.projectId;
+      if (!projectId) throw new Error("growth.plan.build requires a projectId");
+      const result = await buildGrowthPlan(ctx.db, projectId);
+      return { created: result.created, hasEvidence: Boolean(result.evidence) };
+    },
+  });
+
+  registerJobHandler({
     type: "pipeline.advance",
     description: "Advance a GitHub/Vercel automation pipeline one stage",
     async run(ctx) {

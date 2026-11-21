@@ -23,6 +23,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Analytics", slug: "analytics", group: "Operations" },
   { label: "Reports", slug: "reports", group: "Operations" },
   { label: "Security & Permissions", slug: "security", group: "Administration" },
+  { label: "Business Growth", slug: "growth", group: "Operations" },
   { label: "Settings", slug: "settings", group: "Administration" },
 ];
 

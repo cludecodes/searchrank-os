@@ -671,6 +671,53 @@ export const approvals = pgTable(
   (t) => [index("approvals_workspace_status_idx").on(t.workspaceId, t.status)],
 );
 
+export const growthOpportunities = pgTable(
+  "growth_opportunities",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    problem: text("problem").notNull(),
+    searchDemand: text("search_demand"),
+    buyerIntent: text("buyer_intent").$type<SearchIntent>(),
+    competitorWeakness: text("competitor_weakness"),
+    contentOpportunity: text("content_opportunity"),
+    conversionOpportunity: text("conversion_opportunity"),
+    partnership: text("partnership"),
+    referral: text("referral"),
+    score: integer("score").notNull().default(0),
+    evidence: jsonb("evidence").$type<Json>().notNull().default({}),
+    status: text("status").notNull().default("identified"),
+    createdByAgent: text("created_by_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("growth_opportunities_project_idx").on(t.projectId, t.createdAt)],
+);
+
+export const conversions = pgTable(
+  "conversions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // lead | sale | signup | call | quote
+    sourceUrl: text("source_url"),
+    landingPage: text("landing_page"),
+    keyword: text("keyword"),
+    count: integer("count").notNull().default(1),
+    revenue: real("revenue").notNull().default(0),
+    currency: text("currency").notNull().default("USD"),
+    qualified: boolean("qualified").notNull().default(false),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+    metadata: jsonb("metadata").$type<Json>().notNull().default({}),
+    submittedBy: text("submitted_by"),
+  },
+  (t) => [index("conversions_project_idx").on(t.projectId, t.recordedAt)],
+);
+
 export const reports = pgTable(
   "reports",
   {
@@ -705,3 +752,5 @@ export type ContentItem = InferSelectModel<typeof contentItems>;
 export type SeoAudit = InferSelectModel<typeof seoAudits>;
 export type Page = InferSelectModel<typeof pages>;
 export type CodePipeline = InferSelectModel<typeof codePipelines>;
+export type GrowthOpportunity = InferSelectModel<typeof growthOpportunities>;
+export type Conversion = InferSelectModel<typeof conversions>;

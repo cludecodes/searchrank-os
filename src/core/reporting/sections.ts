@@ -242,7 +242,10 @@ export async function getSectionData(db: Database, workspaceId: string, section:
           ...pending.map((a) => ({ Action: `approval:${a.actionType}`, Actor: fmt(a.requestedByAgent), Target: a.id.slice(0, 8), Decision: a.status, Time: fmt(a.createdAt) })),
           ...list.map((l) => ({ Action: l.action, Actor: fmt(l.actorId?.slice(0, 8)), Target: fmt(l.targetId?.slice(0, 8) ?? l.targetType), Decision: "—", Time: fmt(l.createdAt) })),
         ],
-        notes: ["Production changes, publishing and URL submissions require explicit human approval."],
+        notes: [
+          "Production changes, publishing and URL submissions require explicit human approval.",
+          "Run /api/security/audit for the live security posture check and backup manifest.",
+        ],
       };
     }
     case "settings": {

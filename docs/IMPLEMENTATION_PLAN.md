@@ -206,14 +206,30 @@ schedules, rate limits.
       admin identity, workspace and schedules retained
 - [x] Tests: 3 new Phase 9 tests (88 total), all passing
 
-### Phase 10 — Business growth engine
-Problem/demand/intent/weakness mapping tied to qualified leads and revenue.
+### Phase 10 — Business growth engine (completed & verified)
+- [x] `growth_opportunities` + `conversions` tables (migration applied)
+- [x] Evidence collector from persisted keywords, competitor gaps, questions and pages
+- [x] Deterministic growth plan: problem, demand, buyer intent, competitor
+      weakness, content and conversion opportunities, referral signals
+- [x] Conversion/lead/revenue measurement from operator-recorded rows only
+- [x] APIs `/api/growth`, `/api/growth/conversions`; `/dashboard/growth`
+- [x] `growth.plan.build` job handler
+- [x] Tests: 4 new (100 total), all passing
 
-### Phase 11 — Automation & reporting
-Hourly/daily/weekly/monthly schedules; executive reports from real data.
+### Phase 11 — Automation & reporting (completed & verified)
+- [x] Executive report builder from persisted data: work completed, issues
+      discovered/resolved, click/impression movements, top-3/top-10,
+      conversions and recommended next actions
+- [x] `/api/reports/executive` (preview + store), `report.executive` job
+- [x] Redesigned `/dashboard/reports` with 7/14/30/90-day windows
+- [x] Tests: 3 new, all passing
 
-### Phase 12 — Security & quality
-Encryption, least privilege, rate limits, RBAC, backups, approvals, tests.
+### Phase 12 — Security & quality (completed & verified)
+- [x] Backup manifest (row counts per table) via `/api/security/audit`
+- [x] Live security audit: encryption key, superadmin, critical approvals,
+      audit trail, workspace scoping
+- [x] Tests: 3 new, all passing
+- [x] All 12 phases complete: 100 tests, typecheck clean, build verified
 
 ## Testing strategy
 

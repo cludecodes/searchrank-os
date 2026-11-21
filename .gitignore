@@ -14,3 +14,5 @@ drizzle/meta/_journal.json.bak
 .vercel
 .env*
 tsconfig.tsbuildinfo
+# OAuth provider credentials — never commit client secrets
+config/google-oauth.json
